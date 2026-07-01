@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #ffffff;
+    color: #1A1A1A;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer utilities {
+  .product-shadow {
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .product-shadow:hover {
+    box-shadow: 0 10px 40px rgba(238, 64, 54, 0.08);
+    transform: translateY(-4px);
+  }
+  .cat-card-hover {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .cat-card-hover:hover {
+    transform: scale(1.02);
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
