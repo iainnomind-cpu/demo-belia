@@ -1,4 +1,4 @@
-﻿# Feature Specification: Belia — Plataforma E-commerce + Sistema de Gestión Integral
+# Feature Specification: Belia — Plataforma E-commerce + Sistema de Gestión Integral
 
 **Feature Branch**: `001-belia-platform`
 
@@ -7,6 +7,16 @@
 **Status**: Draft
 
 **Input**: DESIGN_BELIA.md v2.0 (fuente de verdad del proyecto — post-retroalimentación de cliente)
+
+## Clarifications
+
+### Session 2026-07-11
+
+- Q: ¿Cuál es el umbral de LTV para etiquetar a un cliente como VIP? → A: El umbral es configurable por el admin desde el panel (campo editable en `/admin/settings` o equivalente); no hay valor fijo en código ni en la spec.
+- Q: ¿Qué ocurre cuando Stripe rechaza o falla el pago durante el checkout? → A: No se crea ninguna orden. El sistema muestra el mensaje de error de pago y permite que el usuario corrija los datos de pago y reintente directamente en la misma pantalla de checkout, sin perder su carrito ni su dirección.
+- Q: ¿Cómo debe cargarse el catálogo cuando hay más productos de los que caben en pantalla? → A: Scroll infinito — el sistema carga automáticamente el siguiente lote de 24 productos al acercarse al final de la lista; no hay paginación con números de página ni botón "Cargar más" manual.
+- Q: ¿Cuáles son las transiciones válidas para el estado de un pedido? → A: Progresivo con cancelación libre: Procesando → Enviado → Entregado (sin retroceso). Se puede Cancelar estando en "Procesando" o "Enviado".
+- Q: ¿Cómo se notifica al usuario cuando su solicitud de proveedor es aprobada o rechazada? → A: Email automático: El sistema envía un correo electrónico al proveedor con el resultado (e instrucciones si es aprobado) usando una Supabase Edge Function configurada con SMTP de Gmail (App Password).
 
 **Constitution Compliance** (required for every Belia spec):
 - [x] RLS enabled on all tables touched by this feature
@@ -127,8 +137,8 @@ Un interesado en ser proveedor mayorista llena el formulario público en `/prove
 **Acceptance Scenarios**:
 
 1. **Given** un visitante sin cuenta llena el formulario en `/proveedores` con empresa, nombre, email, teléfono, RFC y categoría de interés, **When** envía el formulario, **Then** se crea un registro en `suppliers` con `status = 'pendiente'` y ningún acceso especial es otorgado todavía.
-2. **Given** el admin está en `/admin/suppliers` y ve una solicitud pendiente, **When** la aprueba (con nota opcional), **Then** el proveedor recibe acceso con rol `proveedor` en Supabase Auth y su registro cambia a `status = 'aprobado'`.
-3. **Given** el admin rechaza una solicitud, **When** registra el rechazo, **Then** el registro queda con `status = 'rechazado'` y el badge de color rojo es visible en el panel; el solicitante no recibe acceso.
+2. **Given** el admin está en `/admin/suppliers` y ve una solicitud pendiente, **When** la aprueba (con nota opcional), **Then** el proveedor recibe acceso con rol `proveedor` en Supabase Auth, su registro cambia a `status = 'aprobado'`, y el sistema le envía automáticamente un email de notificación (vía Gmail SMTP) con las instrucciones de acceso.
+3. **Given** el admin rechaza una solicitud, **When** registra el rechazo, **Then** el registro queda con `status = 'rechazado'` y el badge de color rojo es visible en el panel; el solicitante recibe un email automático de notificación (vía Gmail SMTP) y no recibe acceso al sistema.
 4. **Given** un usuario autenticado con rol `proveedor` y `status = 'aprobado'` navega el catálogo, **When** visualiza un producto que tiene `price_proveedor` definido, **Then** ve el precio de proveedor en lugar del precio público, obtenido vía la vista/RPC segura (nunca vía select directo a la columna).
 5. **Given** un usuario con rol `proveedor` aprobado completa un pedido, **When** el pedido se crea, **Then** `orders.tipo = 'mayoreo'` y aparece con distinción visual clara (badge o etiqueta) en `/admin/orders`.
 6. **Given** un intento de consulta pública o con rol `cliente` que intenta acceder a `price_proveedor`, **When** se ejecuta la consulta, **Then** el campo devuelve `null` o el acceso es denegado por RLS — nunca se expone el precio de proveedor a roles no autorizados.
@@ -144,6 +154,7 @@ Un interesado en ser proveedor mayorista llena el formulario público en `/prove
 - ¿Qué ocurre si un visitante intenta llegar a `/admin` sin autenticar? → Redirección inmediata al login; no se carga ningún contenido del panel.
 - ¿Qué ocurre si el sync detecta un SKU duplicado en la hoja (dos filas con el mismo código)? → El sistema toma la primera ocurrencia, registra el conflicto en el diff preview y advierte al admin.
 - ¿Qué ocurre si se cambia el precio público de un producto y hay un `Descuento Proveedor %` definido? → El próximo sync recalcula `price_proveedor` automáticamente; no requiere intervención manual.
+- ¿Qué ocurre si Stripe rechaza o falla el pago? → No se crea ningún registro en `orders`. El sistema muestra el mensaje de error de Stripe al usuario y le permite corregir los datos de pago y reintentar en la misma pantalla de checkout; el carrito y la dirección de envío permanecen intactos.
 
 ---
 
@@ -157,6 +168,7 @@ Un interesado en ser proveedor mayorista llena el formulario público en `/prove
 - **FR-003**: El buscador DEBE encontrar productos por nombre, marca, tono, código de tono y SKU.
 - **FR-004**: Los filtros de catálogo DEBEN permitir filtrar por categoría, subcategoría, marca y rango de precio.
 - **FR-005**: El storefront DEBE mostrar únicamente productos con `active = true`; los desactivados no deben aparecer en ningún listado ni buscador.
+- **FR-025**: El listado de catálogo DEBE implementar scroll infinito: muestra un primer lote de 24 productos y carga automáticamente los siguientes 24 al detectar que el usuario se acerca al final de la lista. El indicador de carga DEBE ser visible durante la obtención del siguiente lote. Cuando no haya más productos, el sistema DEBE mostrar un mensaje de fin de catálogo.
 
 **Seguridad de datos de producto**
 - **FR-006**: El campo `price_proveedor` NUNCA debe aparecer en consultas públicas ni en respuestas accesibles a usuarios con rol `cliente` o sin autenticar. El acceso se otorga exclusivamente vía una vista o RPC que verifica rol `proveedor` autenticado y aprobado. *(RLS gate — deployment blocker)*
@@ -165,12 +177,13 @@ Un interesado en ser proveedor mayorista llena el formulario público en `/prove
 **Carrito y Checkout**
 - **FR-008**: El carrito DEBE persistir entre sesiones del mismo usuario en la base de datos (no en memoria del navegador).
 - **FR-009**: El sistema DEBE consultar el costo de envío vía la integración de envíos (backend) antes de presentar el total al usuario.
-- **FR-010**: Al confirmar el pago, el sistema DEBE crear registros en `orders` y `order_items` con los datos del pedido, customer, items, precios unitarios y estado inicial `'Procesando'`.
+- **FR-010**: Al confirmar el pago, el sistema DEBE crear registros en `orders` y `order_items` **únicamente si Stripe confirma el cobro exitosamente**. Un pago rechazado o fallido NO DEBE crear ningún registro de orden; el carrito y la dirección del usuario DEBEN conservarse intactos para permitir el reintento.
+- **FR-010b**: Ante un fallo de pago, el sistema DEBE mostrar el mensaje de error de Stripe al usuario y habilitarle corregir los datos de pago y reintentar en la misma pantalla de checkout, sin recargar ni perder el progreso del checkout.
 - **FR-011**: Los pedidos realizados por un usuario con rol `proveedor` aprobado DEBEN registrarse con `tipo = 'mayoreo'`.
 
 **Panel de Administración**
 - **FR-012**: El acceso a `/admin` DEBE requerir autenticación con rol `admin`; cualquier otro rol o visitante sin sesión DEBE ser redirigido al login.
-- **FR-013**: El admin DEBE poder cambiar el estado de un pedido entre: Procesando, Enviado, Entregado, Cancelado. El cambio DEBE reflejarse inmediatamente.
+- **FR-013**: El admin DEBE poder cambiar el estado de un pedido siguiendo un flujo progresivo estricto (Procesando → Enviado → Entregado, sin posibilidad de retroceso). La cancelación (estado "Cancelado") DEBE permitirse únicamente desde los estados "Procesando" o "Enviado". El cambio DEBE reflejarse inmediatamente.
 - **FR-014**: El admin DEBE poder marcar manualmente un producto como destacado (`is_featured_bestseller`, `is_featured_new`). Los destacados NO son calculados automáticamente por volumen de ventas.
 - **FR-015**: El admin DEBE poder gestionar banners y carrusel del home (`site_content`) sin redeploy.
 - **FR-016**: El admin DEBE poder crear, editar y desactivar categorías/subcategorías desde `/admin/categories`; los cambios DEBEN reflejarse en el mega-menú sin redeploy.
@@ -183,11 +196,11 @@ Un interesado en ser proveedor mayorista llena el formulario público en `/prove
 
 **Portal de Proveedores**
 - **FR-021**: El formulario público en `/proveedores` DEBE guardar la solicitud con `status = 'pendiente'` sin otorgar ningún acceso al sistema.
-- **FR-022**: Al aprobar una solicitud, el sistema DEBE asignar rol `proveedor` al usuario en el sistema de autenticación.
+- **FR-022**: Al aprobar o rechazar una solicitud, el sistema DEBE enviar un email automático de notificación al solicitante utilizando una Supabase Edge Function conectada vía SMTP a una cuenta de Gmail (App Password). En caso de aprobación, el sistema también DEBE asignar el rol `proveedor` al usuario en el sistema de autenticación.
 - **FR-023**: Un proveedor aprobado y autenticado DEBE ver `price_proveedor` en la ficha de producto (cuando esté definido), obtenido vía la vista/RPC segura.
 
 **CRM**
-- **FR-024**: El LTV de cada cliente DEBE calcularse automáticamente como la suma de todos sus pedidos completados; la etiqueta VIP DEBE asignarse automáticamente al superar el umbral definido.
+- **FR-024**: El LTV de cada cliente DEBE calcularse automáticamente como la suma de todos sus pedidos completados. La etiqueta VIP DEBE asignarse automáticamente cuando el LTV supere el **umbral VIP configurado por el admin** (valor editable desde el panel de administración, sin valor fijo en el código). El sistema DEBE re-evaluar la etiqueta VIP cada vez que se registre un nuevo pedido completado.
 
 ### Key Entities
 
