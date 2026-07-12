@@ -11,6 +11,7 @@ export function AdminProductsPage() {
   const [newProduct, setNewProduct] = useState({
     name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: ''
   });
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fetchProducts = async () => {
@@ -37,6 +38,31 @@ export function AdminProductsPage() {
     e.preventDefault();
     setSaving(true);
     
+    let finalImageUrl = newProduct.image_url;
+
+    // Upload image if selected
+    if (imageFile) {
+      const fileExt = imageFile.name.split('.').pop();
+      const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+      const filePath = `catalog/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(filePath, imageFile);
+        
+      if (uploadError) {
+        alert('Error subiendo imagen: ' + uploadError.message + '\n\nAsegúrate de haber creado un bucket llamado "products" en Supabase Storage y que sea Público.');
+        setSaving(false);
+        return;
+      }
+      
+      const { data: publicUrlData } = supabase.storage
+        .from('products')
+        .getPublicUrl(filePath);
+        
+      finalImageUrl = publicUrlData.publicUrl;
+    }
+    
     const payload = {
       name: newProduct.name,
       sku: newProduct.sku,
@@ -44,7 +70,7 @@ export function AdminProductsPage() {
       price_publico: Number(newProduct.price_publico),
       stock: Number(newProduct.stock),
       category_id: newProduct.category_id || null,
-      image_url: newProduct.image_url,
+      image_url: finalImageUrl,
       source: 'manual'
     };
 
@@ -53,6 +79,7 @@ export function AdminProductsPage() {
     if (!error) {
       setShowModal(false);
       setNewProduct({ name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: '' });
+      setImageFile(null);
       void fetchProducts();
     } else {
       alert('Error: ' + error.message);
@@ -135,8 +162,17 @@ export function AdminProductsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">URL de Imagen</label>
-                <input type="url" placeholder="https://..." value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+                <label className="block text-xs font-medium text-text-secondary mb-1">Imagen del Producto</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="file" 
+                    accept="image/*"
+                    onChange={e => setImageFile(e.target.files ? e.target.files[0] : null)}
+                    className="flex-1 border border-gray-300 rounded-lg text-sm p-1.5 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-belia-red/10 file:text-belia-red hover:file:bg-belia-red/20"
+                  />
+                  <div className="flex items-center text-xs text-text-meta px-2">o</div>
+                  <input type="url" placeholder="URL web (opcional)" value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} className="flex-1 border-gray-300 rounded-lg text-sm" disabled={!!imageFile} />
+                </div>
               </div>
               
               <div className="pt-4 flex justify-end gap-3 border-t border-divider mt-6">
