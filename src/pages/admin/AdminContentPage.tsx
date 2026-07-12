@@ -3,8 +3,7 @@ import { supabase } from '../../lib/supabase';
 
 interface SiteContent {
   id: string;
-  type: string;
-  content: any;
+  content_data: any;
 }
 
 export function AdminContentPage() {
@@ -25,13 +24,13 @@ export function AdminContentPage() {
 
   const handleSave = async (id: string, newContent: any) => {
     setSaving(id);
-    await (supabase.from('site_content') as any).update({ content: newContent }).eq('id', id);
-    setContents(contents.map(c => c.id === id ? { ...c, content: newContent } : c));
+    await (supabase.from('site_content') as any).update({ content_data: newContent }).eq('id', id);
+    setContents(contents.map(c => c.id === id ? { ...c, content_data: newContent } : c));
     setSaving(null);
   };
 
-  const getBanners = () => contents.filter(c => c.type === 'banner');
-  const getSettings = () => contents.filter(c => c.type === 'setting');
+  const getBanners = () => contents.filter(c => c.id.includes('banner') || c.id.includes('carousel'));
+  const getSettings = () => contents.filter(c => !c.id.includes('banner') && !c.id.includes('carousel'));
 
   return (
     <div>
@@ -62,8 +61,8 @@ export function AdminContentPage() {
                     <label className="block text-xs font-medium text-text-secondary mb-1">Título</label>
                     <input 
                       type="text" 
-                      value={banner.content.title || ''}
-                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content: { ...c.content, title: e.target.value } } : c))}
+                      value={banner.content_data.title || ''}
+                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content_data: { ...c.content_data, title: e.target.value } } : c))}
                       className="w-full text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
                     />
                   </div>
@@ -71,8 +70,8 @@ export function AdminContentPage() {
                     <label className="block text-xs font-medium text-text-secondary mb-1">Subtítulo</label>
                     <input 
                       type="text" 
-                      value={banner.content.subtitle || ''}
-                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content: { ...c.content, subtitle: e.target.value } } : c))}
+                      value={banner.content_data.subtitle || ''}
+                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content_data: { ...c.content_data, subtitle: e.target.value } } : c))}
                       className="w-full text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
                     />
                   </div>
@@ -80,18 +79,18 @@ export function AdminContentPage() {
                     <label className="block text-xs font-medium text-text-secondary mb-1">URL de Imagen</label>
                     <input 
                       type="text" 
-                      value={banner.content.image_url || ''}
-                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content: { ...c.content, image_url: e.target.value } } : c))}
+                      value={banner.content_data.image_url || ''}
+                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content_data: { ...c.content_data, image_url: e.target.value } } : c))}
                       className="w-full text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
                     />
-                    {banner.content.image_url && (
+                    {banner.content_data.image_url && (
                       <div className="mt-2 relative h-32 rounded bg-surface-dim overflow-hidden border border-divider">
-                        <img src={banner.content.image_url} alt="" className="w-full h-full object-cover" />
+                        <img src={banner.content_data.image_url} alt="" className="w-full h-full object-cover" />
                       </div>
                     )}
                   </div>
                   <button 
-                    onClick={() => handleSave(banner.id, banner.content)}
+                    onClick={() => handleSave(banner.id, banner.content_data)}
                     disabled={saving === banner.id}
                     className="w-full bg-surface-container text-belia-red font-bold py-2 rounded-lg hover:bg-belia-red hover:text-white transition-colors disabled:opacity-50"
                   >
@@ -121,13 +120,13 @@ export function AdminContentPage() {
                     <label className="block text-xs font-medium text-text-secondary mb-1">Valor</label>
                     <input 
                       type="text" 
-                      value={setting.content.value || ''}
-                      onChange={e => setContents(contents.map(c => c.id === setting.id ? { ...c, content: { ...c.content, value: e.target.value } } : c))}
+                      value={setting.content_data.value || ''}
+                      onChange={e => setContents(contents.map(c => c.id === setting.id ? { ...c, content_data: { ...c.content_data, value: e.target.value } } : c))}
                       className="w-full text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
                     />
                   </div>
                   <button 
-                    onClick={() => handleSave(setting.id, setting.content)}
+                    onClick={() => handleSave(setting.id, setting.content_data)}
                     disabled={saving === setting.id}
                     className="w-full bg-surface-container text-belia-red font-bold py-2 rounded-lg hover:bg-belia-red hover:text-white transition-colors disabled:opacity-50"
                   >
