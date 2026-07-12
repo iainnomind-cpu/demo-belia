@@ -94,11 +94,11 @@ every Supabase table created or modified by this feature has Row Level Security 
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Crear esquema de tabla de carrito (persistente) si se requiere, o utilizar tabla temporal, agregándolo a migración `0002_cart_schema.sql` (RLS protegido).
+- [ ] T021 [US3] Crear esquema de tabla de carrito persistente en DB (obligatorio por FR-008), agregándolo a migración `0002_cart_schema.sql` (RLS protegido).
 - [ ] T022 [US3] Crear hook/Zustand store híbrido para carrito en `src/store/cartStore.ts` (sync con DB).
 - [ ] T023 [US3] Implementar componente `CartSidebar` deslizante en `src/components/cart/CartSidebar.tsx`
-- [ ] T024 [US3] Crear Supabase Edge Function `create-payment-intent` en `supabase/functions/create-payment-intent/index.ts` que calcule cotización de envío y llame a Stripe.
-- [ ] T025 [US3] Implementar vista de Checkout en `src/pages/storefront/CheckoutPage.tsx` integrando Stripe Elements.
+- [ ] T024 [US3] Crear Supabase Edge Function `create-payment-intent` en `supabase/functions/create-payment-intent/index.ts` (debe incluir validación estricta de stock antes de cobrar y llamar a envía.com).
+- [ ] T025 [US3] Implementar vista de Checkout en `src/pages/storefront/CheckoutPage.tsx` integrando Stripe Elements y manejo de error visual si el stock se agota.
 - [ ] T026 [US3] Implementar creación de la orden (`orders` y `order_items`) post-pago exitoso y lógica de fallo de pago (US2 edge case).
 
 **Checkpoint**: All user stories should now be independently functional.
@@ -118,6 +118,7 @@ every Supabase table created or modified by this feature has Row Level Security 
 - [ ] T029 [US4] Crear vista CRM en `src/pages/admin/CustomersAdminPage.tsx` con cálculo de LTV dinámico.
 - [ ] T030 [US4] Crear gestor de Catálogo en `src/pages/admin/ProductsAdminPage.tsx` permitiendo crear productos con origen 'manual'.
 - [ ] T031 [US4] Crear gestor de contenido (`site_content`) en `src/pages/admin/ContentAdminPage.tsx`.
+- [ ] T031b [US4] Crear gestor de Categorías en `src/pages/admin/CategoriesAdminPage.tsx` para crear/editar/desactivar taxonomía.
 
 ---
 
