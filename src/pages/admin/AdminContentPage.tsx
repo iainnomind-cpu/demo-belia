@@ -10,6 +10,7 @@ export function AdminContentPage() {
   const [contents, setContents] = useState<SiteContent[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<Record<string, File>>({});
 
   const fetchContent = async () => {
     setLoading(true);
@@ -24,8 +25,43 @@ export function AdminContentPage() {
 
   const handleSave = async (id: string, newContent: any) => {
     setSaving(id);
-    await (supabase.from('site_content') as any).update({ content_data: newContent }).eq('id', id);
-    setContents(contents.map(c => c.id === id ? { ...c, content_data: newContent } : c));
+    
+    let finalContent = { ...newContent };
+    const fileToUpload = imageFiles[id];
+
+    if (fileToUpload) {
+      const fileExt = fileToUpload.name.split('.').pop();
+      const fileName = `${id}_${Date.now()}.${fileExt}`;
+      const filePath = `banners/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('products')
+        .upload(filePath, fileToUpload);
+        
+      if (uploadError) {
+        alert('Error subiendo imagen: ' + uploadError.message);
+        setSaving(null);
+        return;
+      }
+      
+      const { data: publicUrlData } = supabase.storage
+        .from('products')
+        .getPublicUrl(filePath);
+        
+      finalContent.image_url = publicUrlData.publicUrl;
+    }
+
+    await (supabase.from('site_content') as any).update({ content_data: finalContent }).eq('id', id);
+    setContents(contents.map(c => c.id === id ? { ...c, content_data: finalContent } : c));
+    
+    if (fileToUpload) {
+      setImageFiles(prev => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+    }
+    
     setSaving(null);
   };
 
@@ -76,16 +112,36 @@ export function AdminContentPage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-text-secondary mb-1">URL de Imagen</label>
-                    <input 
-                      type="text" 
-                      value={banner.content_data.image_url || ''}
-                      onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content_data: { ...c.content_data, image_url: e.target.value } } : c))}
-                      className="w-full text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
-                    />
-                    {banner.content_data.image_url && (
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Imagen del Banner</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="file" 
+                        accept="image/*"
+                        onChange={e => {
+                          if (e.target.files && e.target.files[0]) {
+                            setImageFiles(prev => ({ ...prev, [banner.id]: e.target.files![0] }));
+                          }
+                        }}
+                        className="flex-1 border border-gray-300 rounded-lg text-sm p-1.5 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-belia-red/10 file:text-belia-red hover:file:bg-belia-red/20"
+                      />
+                      <div className="flex items-center text-xs text-text-meta px-2">o</div>
+                      <input 
+                        type="text" 
+                        placeholder="URL web (opcional)"
+                        value={banner.content_data.image_url || ''}
+                        onChange={e => setContents(contents.map(c => c.id === banner.id ? { ...c, content_data: { ...c.content_data, image_url: e.target.value } } : c))}
+                        className="flex-1 text-sm border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red"
+                        disabled={!!imageFiles[banner.id]}
+                      />
+                    </div>
+                    {banner.content_data.image_url && !imageFiles[banner.id] && (
                       <div className="mt-2 relative h-32 rounded bg-surface-dim overflow-hidden border border-divider">
                         <img src={banner.content_data.image_url} alt="" className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    {imageFiles[banner.id] && (
+                      <div className="mt-2 text-xs text-belia-red">
+                        Nueva imagen seleccionada: {imageFiles[banner.id].name} (se subirá al guardar)
                       </div>
                     )}
                   </div>
