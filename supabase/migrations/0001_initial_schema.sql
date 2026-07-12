@@ -27,8 +27,8 @@ CREATE POLICY "public_read_active_categories"
 -- Admin: full access
 CREATE POLICY "admin_full_access_categories"
   ON public.categories FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── PRODUCTS ───────────────────────────────────────────────
 -- price_proveedor is stored here but NEVER returned by public policies.
@@ -63,8 +63,8 @@ CREATE POLICY "public_read_active_products"
 -- Admin: full access to all columns
 CREATE POLICY "admin_full_access_products"
   ON public.products FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── Secure RPC for supplier price access ───────────────────
 -- Returns price_proveedor ONLY for authenticated approved suppliers.
@@ -91,7 +91,7 @@ LANGUAGE plpgsql SECURITY DEFINER
 AS $$
 BEGIN
   -- Gate: caller must be an authenticated approved proveedor or admin
-  IF (auth.jwt() ->> 'role') NOT IN ('proveedor', 'admin') THEN
+  IF (auth.jwt() -> 'user_metadata' ->> 'role') NOT IN ('proveedor', 'admin') THEN
     RAISE EXCEPTION 'Access denied: insufficient role';
   END IF;
 
@@ -136,8 +136,8 @@ CREATE POLICY "users_insert_own_orders"
 -- Admin: full access
 CREATE POLICY "admin_full_access_orders"
   ON public.orders FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── ORDER ITEMS ─────────────────────────────────────────────
 CREATE TABLE public.order_items (
@@ -170,8 +170,8 @@ CREATE POLICY "users_insert_own_order_items"
 
 CREATE POLICY "admin_full_access_order_items"
   ON public.order_items FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── SUPPLIERS ───────────────────────────────────────────────
 CREATE TABLE public.suppliers (
@@ -199,8 +199,8 @@ CREATE POLICY "public_insert_supplier_request"
 -- Admin: full access to all supplier records
 CREATE POLICY "admin_full_access_suppliers"
   ON public.suppliers FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── SYNC LOGS ───────────────────────────────────────────────
 CREATE TABLE public.sync_logs (
@@ -220,8 +220,8 @@ ALTER TABLE public.sync_logs ENABLE ROW LEVEL SECURITY;
 -- Admin only
 CREATE POLICY "admin_full_access_sync_logs"
   ON public.sync_logs FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── SITE CONTENT ────────────────────────────────────────────
 CREATE TABLE public.site_content (
@@ -240,8 +240,8 @@ CREATE POLICY "public_read_site_content"
 -- Admin: write access
 CREATE POLICY "admin_write_site_content"
   ON public.site_content FOR ALL
-  USING (auth.jwt() ->> 'role' = 'admin')
-  WITH CHECK (auth.jwt() ->> 'role' = 'admin');
+  USING (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin')
+  WITH CHECK (auth.jwt() -> 'user_metadata' ->> 'role' = 'admin');
 
 -- ─── CART (Persistent, per FR-008) ──────────────────────────
 CREATE TABLE public.cart_items (
