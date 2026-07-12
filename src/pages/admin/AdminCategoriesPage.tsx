@@ -24,7 +24,7 @@ export function AdminCategoriesPage() {
   const toggleActive = async (id: string, current: boolean) => {
     const updated = !current;
     setCategories(categories.map(c => c.id === id ? { ...c, is_active: updated } : c));
-    await supabase.from('categories').update({ is_active: updated }).eq('id', id);
+    await (supabase.from('categories') as any).update({ is_active: updated }).eq('id', id);
   };
 
   // Build tree for display

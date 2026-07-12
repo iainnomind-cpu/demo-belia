@@ -28,7 +28,7 @@ export function AdminSuppliersPage() {
       // In a full implementation this would call the /approve-supplier Edge Function 
       // which also creates the auth user. For this stub, we just update the status in the table.
       const newStatus = action === 'approve' ? 'aprobado' : 'rechazado';
-      await supabase.from('suppliers').update({ status: newStatus } as any).eq('id', id);
+      await (supabase.from('suppliers') as any).update({ status: newStatus }).eq('id', id);
       setSuppliers(suppliers.map(s => s.id === id ? { ...s, status: newStatus } : s));
     } finally {
       setProcessing(null);

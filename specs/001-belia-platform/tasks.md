@@ -156,8 +156,8 @@ every Supabase table created or modified by this feature has Row Level Security 
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T040 Validar política de "Zero Placeholders".
-- [ ] T041 Revisión cruzada de variables de entorno (ningún VITE_ expone credenciales).
+- [x] T040 Validar política de "Zero Placeholders".
+- [x] T041 Revisión cruzada de variables de entorno (ningún VITE_ expone credenciales).
 
 ---
 

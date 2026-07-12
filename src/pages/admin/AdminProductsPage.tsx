@@ -24,12 +24,12 @@ export function AdminProductsPage() {
   const toggleActive = async (id: string, current: boolean) => {
     const updated = !current;
     setProducts(products.map(p => p.id === id ? { ...p, is_active: updated } : p));
-    await supabase.from('products').update({ is_active: updated } as any).eq('id', id);
+    await (supabase.from('products') as any).update({ is_active: updated }).eq('id', id);
   };
 
   const updateFeatured = async (id: string, label: string | null) => {
     setProducts(products.map(p => p.id === id ? { ...p, featured_label: label } : p));
-    await supabase.from('products').update({ featured_label: label } as any).eq('id', id);
+    await (supabase.from('products') as any).update({ featured_label: label }).eq('id', id);
   };
 
   const formatPrice = (price: number) => 

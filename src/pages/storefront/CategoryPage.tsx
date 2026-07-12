@@ -46,7 +46,7 @@ export function CategoryPage() {
   useEffect(() => {
     if (user?.role === 'proveedor' || user?.role === 'admin') {
       const fetchSupplierPrices = async () => {
-        const { data } = await supabase.rpc('get_supplier_products', { category_id: categoryId });
+        const { data } = await (supabase.rpc as any)('get_supplier_products', { category_id: categoryId });
         if (data) setSupplierProducts(data);
       };
       void fetchSupplierPrices();

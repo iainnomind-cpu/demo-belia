@@ -25,7 +25,7 @@ export function AdminContentPage() {
 
   const handleSave = async (id: string, newContent: any) => {
     setSaving(id);
-    await supabase.from('site_content').update({ content: newContent }).eq('id', id);
+    await (supabase.from('site_content') as any).update({ content: newContent }).eq('id', id);
     setContents(contents.map(c => c.id === id ? { ...c, content: newContent } : c));
     setSaving(null);
   };

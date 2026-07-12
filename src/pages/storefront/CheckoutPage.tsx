@@ -68,8 +68,8 @@ function CheckoutForm({
 
       if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
         // Crear Orden en Supabase (Solo como fallback si no se usan webhooks, lo cual es el caso para este MVP)
-        const { data: order, error: orderError } = await supabase.from('orders').insert({
-          user_id: user.id,
+        const { data: order, error: orderError } = await (supabase.from('orders') as any).insert({
+          user_id: user?.id,
           tipo: user.role === 'proveedor' ? 'mayoreo' : 'publico',
           status: 'Procesando',
           total_amount: totalAmount,
@@ -90,7 +90,7 @@ function CheckoutForm({
           };
         });
 
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+        const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
         if (itemsError) throw itemsError;
 
         clearCart();

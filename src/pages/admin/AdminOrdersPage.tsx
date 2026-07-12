@@ -29,7 +29,7 @@ export function AdminOrdersPage() {
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     
     // DB Update
-    await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+    await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
   };
 
   const getStatusBadge = (status: string) => {

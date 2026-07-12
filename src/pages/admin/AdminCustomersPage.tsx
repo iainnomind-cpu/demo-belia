@@ -19,21 +19,21 @@ export function AdminCustomersPage() {
       setLoading(true);
       
       // 1. Fetch VIP threshold from site_content
-      const { data: contentData } = await supabase
+      const contentData = (await supabase
         .from('site_content')
         .select('content')
         .eq('id', 'vip_threshold')
-        .single();
+        .single()).data as any;
         
       if (contentData?.content?.value) {
         setVipThreshold(Number(contentData.content.value));
       }
 
       // 2. Fetch all completed/delivered orders to aggregate LTV
-      const { data: orders } = await supabase
+      const orders = (await supabase
         .from('orders')
         .select('user_id, total_amount, created_at')
-        .in('status', ['procesando', 'enviado', 'entregado']);
+        .in('status', ['Procesando', 'Enviado', 'Entregado'])).data as any[];
 
       if (orders) {
         const agg: Record<string, CustomerAggregate> = {};
