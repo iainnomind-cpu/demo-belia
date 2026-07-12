@@ -12,36 +12,43 @@ export interface Database {
         Row: Category;
         Insert: Omit<Category, 'id'>;
         Update: Partial<Omit<Category, 'id'>>;
+        Relationships: any[];
       };
       products: {
         Row: Product;
         Insert: Omit<Product, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<Product, 'id' | 'created_at'>>;
+        Relationships: any[];
       };
       orders: {
         Row: Order;
         Insert: Omit<Order, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<Order, 'id' | 'created_at'>>;
+        Relationships: any[];
       };
       order_items: {
         Row: OrderItem;
         Insert: Omit<OrderItem, 'id'>;
         Update: Partial<Omit<OrderItem, 'id'>>;
+        Relationships: any[];
       };
       suppliers: {
         Row: Supplier;
         Insert: Omit<Supplier, 'id' | 'created_at'>;
         Update: Partial<Omit<Supplier, 'id' | 'created_at'>>;
+        Relationships: any[];
       };
       sync_logs: {
         Row: SyncLog;
         Insert: Omit<SyncLog, 'id'>;
         Update: Partial<Omit<SyncLog, 'id'>>;
+        Relationships: any[];
       };
       site_content: {
         Row: SiteContent;
         Insert: SiteContent;
         Update: Partial<SiteContent>;
+        Relationships: any[];
       };
     };
     Views: Record<string, never>;
