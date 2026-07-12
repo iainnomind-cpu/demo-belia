@@ -24,12 +24,12 @@ export function AdminProductsPage() {
   const toggleActive = async (id: string, current: boolean) => {
     const updated = !current;
     setProducts(products.map(p => p.id === id ? { ...p, is_active: updated } : p));
-    await supabase.from('products').update({ is_active: updated }).eq('id', id);
+    await supabase.from('products').update({ is_active: updated } as any).eq('id', id);
   };
 
   const updateFeatured = async (id: string, label: string | null) => {
     setProducts(products.map(p => p.id === id ? { ...p, featured_label: label } : p));
-    await supabase.from('products').update({ featured_label: label }).eq('id', id);
+    await supabase.from('products').update({ featured_label: label } as any).eq('id', id);
   };
 
   const formatPrice = (price: number) => 
@@ -83,8 +83,8 @@ export function AdminProductsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-text-primary">{formatPrice(product.price_publico)} <span className="text-xs font-normal text-text-meta">Púb</span></div>
-                      {product.price_proveedor && (
-                        <div className="text-success-green font-medium mt-1 text-xs">{formatPrice(product.price_proveedor)} <span className="text-text-meta">B2B</span></div>
+                      {(product as any).price_proveedor && (
+                        <div className="text-success-green font-medium mt-1 text-xs">{formatPrice((product as any).price_proveedor)} <span className="text-text-meta">B2B</span></div>
                       )}
                     </td>
                     <td className="px-6 py-4">

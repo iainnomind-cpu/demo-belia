@@ -31,7 +31,7 @@ export function SupplierFormPage() {
           rfc: formData.rfc,
           category_interest: formData.category_interest,
           status: 'pendiente'
-        });
+        } as any);
 
       if (insertError) throw insertError;
       

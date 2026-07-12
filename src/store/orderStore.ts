@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { CartItem } from './cartStore';
+import type { CartItem } from '../types/database';
 
 export interface Order {
   id: string;

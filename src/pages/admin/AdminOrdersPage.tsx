@@ -34,10 +34,10 @@ export function AdminOrdersPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'procesando': return <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Procesando</span>;
-      case 'enviado': return <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Enviado</span>;
-      case 'entregado': return <span className="bg-success-container text-success-green text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Entregado</span>;
-      case 'cancelado': return <span className="bg-error/10 text-error text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Cancelado</span>;
+      case 'Procesando': return <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Procesando</span>;
+      case 'Enviado': return <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Enviado</span>;
+      case 'Entregado': return <span className="bg-success-container text-success-green text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Entregado</span>;
+      case 'Cancelado': return <span className="bg-error/10 text-error text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Cancelado</span>;
       default: return <span>{status}</span>;
     }
   };
@@ -95,12 +95,12 @@ export function AdminOrdersPage() {
                         value={order.status}
                         onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
                         className="text-xs border-gray-300 rounded-md focus:ring-belia-red focus:border-belia-red py-1 pl-2 pr-6"
-                        disabled={order.status === 'cancelado' || order.status === 'entregado'}
+                        disabled={order.status === 'Cancelado' || order.status === 'Entregado'}
                       >
-                        <option value="procesando">Marcar Procesando</option>
-                        <option value="enviado" disabled={order.status !== 'procesando'}>Marcar Enviado</option>
-                        <option value="entregado" disabled={order.status !== 'enviado'}>Marcar Entregado</option>
-                        <option value="cancelado" disabled={order.status === 'entregado'}>Cancelar</option>
+                        <option value="Procesando">Marcar Procesando</option>
+                        <option value="Enviado" disabled={order.status !== 'Procesando'}>Marcar Enviado</option>
+                        <option value="Entregado" disabled={order.status !== 'Enviado'}>Marcar Entregado</option>
+                        <option value="Cancelado" disabled={order.status === 'Entregado'}>Cancelar</option>
                       </select>
                     </td>
                   </tr>

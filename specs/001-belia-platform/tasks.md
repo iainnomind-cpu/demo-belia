@@ -97,9 +97,9 @@ every Supabase table created or modified by this feature has Row Level Security 
 - [ ] T021 [US3] Crear esquema de tabla de carrito persistente en DB (obligatorio por FR-008), agregándolo a migración `0002_cart_schema.sql` (RLS protegido).
 - [x] T022 [US3] Crear hook/Zustand store híbrido para carrito en `src/store/cartStore.ts` (sync con DB).
 - [x] T023 [US3] Implementar componente `CartSidebar` deslizante en `src/components/cart/CartSidebar.tsx`
-- [ ] T024 [US3] Crear Supabase Edge Function `create-payment-intent` en `supabase/functions/create-payment-intent/index.ts` (debe incluir validación estricta de stock antes de cobrar y llamar a envía.com).
+- [x] T024 [US3] Crear Supabase Edge Function `create-payment-intent` en `supabase/functions/create-payment-intent/index.ts` (debe incluir validación estricta de stock antes de cobrar y llamar a envía.com).
 - [x] T025 [US3] Implementar vista de Checkout en `src/pages/storefront/CheckoutPage.tsx` integrando Stripe Elements y manejo de error visual si el stock se agota.
-- [ ] T026 [US3] Implementar creación de la orden (`orders` y `order_items`) post-pago exitoso y lógica de fallo de pago (US2 edge case).
+- [x] T026 [US3] Implementar creación de la orden (`orders` y `order_items`) post-pago exitoso y lógica de fallo de pago (US2 edge case).
 
 **Checkpoint**: All user stories should now be independently functional.
 

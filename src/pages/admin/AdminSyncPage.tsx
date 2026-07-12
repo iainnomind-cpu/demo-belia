@@ -15,7 +15,7 @@ export function AdminSyncPage() {
     const { data } = await supabase
       .from('sync_logs')
       .select('*')
-      .order('created_at', { ascending: false })
+      .order('started_at', { ascending: false })
       .limit(10);
     
     if (data) setLogs(data);
@@ -170,7 +170,7 @@ export function AdminSyncPage() {
                   logs.map(log => (
                     <tr key={log.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-text-primary whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString('es-MX')}
+                        {new Date(log.started_at).toLocaleString('es-MX')}
                       </td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wider ${
