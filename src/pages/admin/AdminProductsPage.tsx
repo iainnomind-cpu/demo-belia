@@ -6,6 +6,13 @@ export function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+  const [showModal, setShowModal] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: ''
+  });
+  const [saving, setSaving] = useState(false);
+
   const fetchProducts = async () => {
     setLoading(true);
     const { data } = await supabase
@@ -19,7 +26,39 @@ export function AdminProductsPage() {
 
   useEffect(() => {
     void fetchProducts();
+    const fetchCats = async () => {
+      const { data } = await supabase.from('categories').select('id, name');
+      if (data) setCategories(data);
+    };
+    void fetchCats();
   }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    const payload = {
+      name: newProduct.name,
+      sku: newProduct.sku,
+      brand: newProduct.brand,
+      price_publico: Number(newProduct.price_publico),
+      stock: Number(newProduct.stock),
+      category_id: newProduct.category_id || null,
+      image_url: newProduct.image_url,
+      source: 'manual'
+    };
+
+    const { error } = await (supabase.from('products') as any).insert([payload]);
+    
+    if (!error) {
+      setShowModal(false);
+      setNewProduct({ name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: '' });
+      void fetchProducts();
+    } else {
+      alert('Error: ' + error.message);
+    }
+    setSaving(false);
+  };
 
   const toggleActive = async (id: string, current: boolean) => {
     const updated = !current;
@@ -43,12 +82,73 @@ export function AdminProductsPage() {
           <button onClick={fetchProducts} className="p-2 bg-surface-container rounded-lg hover:bg-gray-200 transition-colors" title="Actualizar">
             <span className="material-symbols-outlined text-text-secondary">refresh</span>
           </button>
-          <button className="flex items-center gap-2 bg-belia-red text-white px-4 py-2 rounded-lg font-bold hover:bg-belia-red-deep transition-colors">
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-belia-red text-white px-4 py-2 rounded-lg font-bold hover:bg-belia-red-deep transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">add</span>
             Nuevo (Manual)
           </button>
         </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-bright">
+              <h2 className="font-bold text-lg text-text-primary">Crear Producto Manual</h2>
+              <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-belia-red">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreate} className="p-6 overflow-y-auto space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Nombre del Producto *</label>
+                <input required type="text" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">SKU *</label>
+                  <input required type="text" value={newProduct.sku} onChange={e => setNewProduct({...newProduct, sku: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Marca *</label>
+                  <input required type="text" value={newProduct.brand} onChange={e => setNewProduct({...newProduct, brand: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Precio Público (MXN) *</label>
+                  <input required type="number" min="0" step="0.01" value={newProduct.price_publico} onChange={e => setNewProduct({...newProduct, price_publico: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Stock Inicial *</label>
+                  <input required type="number" min="0" value={newProduct.stock} onChange={e => setNewProduct({...newProduct, stock: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Categoría</label>
+                <select value={newProduct.category_id} onChange={e => setNewProduct({...newProduct, category_id: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm">
+                  <option value="">Seleccione una categoría</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">URL de Imagen</label>
+                <input type="url" placeholder="https://..." value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+              </div>
+              
+              <div className="pt-4 flex justify-end gap-3 border-t border-divider mt-6">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">Cancelar</button>
+                <button type="submit" disabled={saving} className="px-6 py-2 bg-belia-red text-white text-sm font-bold rounded-lg hover:bg-belia-red-deep disabled:opacity-50">
+                  {saving ? 'Guardando...' : 'Crear Producto'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-divider overflow-hidden shadow-sm">
         <div className="overflow-x-auto">

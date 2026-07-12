@@ -5,6 +5,9 @@ import type { Category } from '../../types/database';
 export function AdminCategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [newCat, setNewCat] = useState({ name: '', slug: '', parent_id: '' });
+  const [saving, setSaving] = useState(false);
 
   const fetchCategories = async () => {
     setLoading(true);
@@ -20,6 +23,29 @@ export function AdminCategoriesPage() {
   useEffect(() => {
     void fetchCategories();
   }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    const payload = {
+      name: newCat.name,
+      slug: newCat.slug,
+      parent_id: newCat.parent_id || null,
+      is_active: true
+    };
+
+    const { error } = await (supabase.from('categories') as any).insert([payload]);
+    
+    if (!error) {
+      setShowModal(false);
+      setNewCat({ name: '', slug: '', parent_id: '' });
+      void fetchCategories();
+    } else {
+      alert('Error: ' + error.message);
+    }
+    setSaving(false);
+  };
 
   const toggleActive = async (id: string, current: boolean) => {
     const updated = !current;
@@ -38,12 +64,55 @@ export function AdminCategoriesPage() {
           <button onClick={fetchCategories} className="p-2 bg-surface-container rounded-lg hover:bg-gray-200 transition-colors" title="Actualizar">
             <span className="material-symbols-outlined text-text-secondary">refresh</span>
           </button>
-          <button className="flex items-center gap-2 bg-belia-red text-white px-4 py-2 rounded-lg font-bold hover:bg-belia-red-deep transition-colors">
+          <button 
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-belia-red text-white px-4 py-2 rounded-lg font-bold hover:bg-belia-red-deep transition-colors"
+          >
             <span className="material-symbols-outlined text-sm">add</span>
             Nueva Categoría
           </button>
         </div>
       </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-divider flex justify-between items-center bg-surface-bright">
+              <h2 className="font-bold text-lg text-text-primary">Nueva Categoría</h2>
+              <button onClick={() => setShowModal(false)} className="text-text-secondary hover:text-belia-red">
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+            
+            <form onSubmit={handleCreate} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Nombre *</label>
+                <input required type="text" value={newCat.name} onChange={e => setNewCat({...newCat, name: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Slug (URL) *</label>
+                <input required type="text" value={newCat.slug} onChange={e => setNewCat({...newCat, slug: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm" placeholder="ejemplo-categoria" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Categoría Padre (opcional)</label>
+                <select value={newCat.parent_id} onChange={e => setNewCat({...newCat, parent_id: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm">
+                  <option value="">-- Ninguna (Categoría Principal) --</option>
+                  {roots.map(root => (
+                    <option key={root.id} value={root.id}>{root.name}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="pt-4 flex justify-end gap-3 border-t border-divider mt-6">
+                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">Cancelar</button>
+                <button type="submit" disabled={saving} className="px-6 py-2 bg-belia-red text-white text-sm font-bold rounded-lg hover:bg-belia-red-deep disabled:opacity-50">
+                  {saving ? 'Guardando...' : 'Crear'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-divider p-6 shadow-sm">
         {loading ? (
