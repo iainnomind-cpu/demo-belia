@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useInView, Variants } from 'framer-motion';
+import { motion, useInView, type Variants } from 'framer-motion';
 import { useProducts } from '../../hooks/useProducts';
 import { ProductCard } from '../../components/catalog/ProductCard';
 import { useAuth } from '../../hooks/useAuth';
