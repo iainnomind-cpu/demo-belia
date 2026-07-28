@@ -14,7 +14,7 @@ const containerVariants = {
 };
 const itemVariants = {
   hidden:  { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 0.61, 0.36, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
 };
 
 /* ─── Professional SVG category icons ─────────────────────────── */

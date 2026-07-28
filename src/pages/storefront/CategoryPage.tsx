@@ -17,7 +17,7 @@ const containerVariants = {
 };
 const itemVariants = {
   hidden:  { opacity: 0, y: 12 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.22, 0.61, 0.36, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
 };
 
 function ProductSkeleton({ viewMode }: { viewMode: ViewMode }) {
