@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCategories } from '../../hooks/useCategories';
@@ -6,9 +6,12 @@ import { useCartStore } from '../../store/cartStore';
 import { MobileMenu } from './MobileMenu';
 
 /**
- * Header — Dynamic header with Belia mega-menu (Desktop) and hamburger (Mobile).
- * Navigation data is fetched from Supabase via useCategories() — never hardcoded.
- * Validates 3-click rule: home → category → product is 2 clicks from this header.
+ * Header — Belia premium header con mega-menú tipo Sephora.
+ * - Desktop: barra de navegación con mega-menú desplegable al hover (sin click)
+ * - Mobile: hamburguesa con panel overlay glassmorphism
+ * - Logo: imagen real /logo.jpeg centrada
+ * - Buscador: siempre visible en desktop
+ * - Regla: máximo 3 clics hasta producto (home → cat → producto = 2 desde aquí)
  */
 export function Header() {
   const { categoryTree, loading } = useCategories();
@@ -16,9 +19,19 @@ export function Header() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
+  const megaMenuRef = useRef<HTMLDivElement>(null);
+  const hideTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cartItemCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Detectar scroll para efecto de sombra en header
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 8);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,125 +40,262 @@ export function Header() {
     }
   };
 
+  // Mostrar mega-menú con pequeño delay para evitar destellos accidentales
+  const handleMouseEnter = (catId: string) => {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+    setActiveCategory(catId);
+  };
+
+  const handleMouseLeave = () => {
+    hideTimeout.current = setTimeout(() => setActiveCategory(null), 120);
+  };
+
+  const handleMegaMenuEnter = () => {
+    if (hideTimeout.current) clearTimeout(hideTimeout.current);
+  };
+
+  const activecat = categoryTree.find((c) => c.id === activeCategory);
+
   return (
     <>
-      <motion.header
-        initial={{ y: -50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="bg-white sticky top-0 z-50 border-b border-divider"
+      <header
+        className={`sticky top-0 z-50 transition-all duration-300 backdrop-blur-xl bg-white/85 ${
+          isScrolled ? 'shadow-[0_4px_30px_rgba(0,0,0,0.08)] border-b border-white/20' : 'border-b border-divider'
+        }`}
       >
-        <div className="flex justify-between items-center w-full px-margin py-4 max-w-7xl mx-auto">
-          {/* ─ Search ─────────────────────── */}
-          <div className="flex items-center gap-gutter flex-1">
-            <form onSubmit={handleSearch} className="hidden md:flex items-center bg-gray-50 border border-divider rounded-full px-4 py-2 w-64 focus-within:border-belia-red focus-within:ring-1 focus-within:ring-belia-red transition-colors">
-              <span className="material-symbols-outlined text-text-secondary mr-2 text-base">search</span>
+        {/* ─── Top bar: promo / info ─────────────────────────────── */}
+        <div className="bg-belia-red text-white text-center py-2 px-4 text-[11px] font-medium tracking-wide hidden md:block">
+          🌸 Envío gratis en compras mayores a $499 · Productos de belleza profesional
+        </div>
+
+        {/* ─── Main header row ────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-4 md:px-8 py-3 max-w-7xl mx-auto gap-4">
+
+          {/* Search — left (desktop) / hamburger (mobile) */}
+          <div className="flex items-center gap-3 flex-1">
+            {/* Mobile hamburger */}
+            <button
+              className="md:hidden flex flex-col gap-[5px] p-2 text-belia-charcoal"
+              onClick={() => setIsMobileMenuOpen(true)}
+              aria-label="Abrir menú"
+            >
+              <span className="block w-5 h-[1.5px] bg-current rounded-full" />
+              <span className="block w-5 h-[1.5px] bg-current rounded-full" />
+              <span className="block w-3.5 h-[1.5px] bg-current rounded-full" />
+            </button>
+
+            {/* Buscador desktop */}
+            <form
+              onSubmit={handleSearch}
+              className="hidden md:flex search-input w-72 xl:w-80"
+            >
+              <span className="material-symbols-outlined text-belia-gray text-[18px]">search</span>
               <input
-                className="bg-transparent border-none focus:ring-0 p-0 w-full text-sm placeholder-text-meta outline-none"
-                placeholder="Buscar productos o marcas..."
+                className="bg-transparent border-none focus:ring-0 p-0 w-full text-sm placeholder-text-meta outline-none font-body-md"
+                placeholder="Buscar productos, marcas o tonos..."
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </form>
-            {/* Mobile hamburger */}
-            <button
-              className="md:hidden p-2 text-text-primary"
-              onClick={() => setIsMobileMenuOpen(true)}
-              aria-label="Abrir menú"
-            >
-              <span className="material-symbols-outlined">menu</span>
-            </button>
           </div>
 
-          {/* ─ Logo ─────────────────────────── */}
-          <div className="flex-shrink-0 flex justify-center flex-1">
-            <Link to="/" className="font-headline-md text-3xl font-bold text-belia-red tracking-tight">
-              Belia
+          {/* ─── Logo centrado ─────────────────────────────────────── */}
+          <div className="flex-shrink-0 flex justify-center">
+            <Link to="/" aria-label="Belia — Inicio">
+              <img
+                src="/logo.png"
+                alt="Belia"
+                className="h-12 md:h-14 w-auto object-contain"
+                style={{ filter: 'drop-shadow(0 1px 4px rgba(246,66,60,0.15))' }}
+              />
             </Link>
           </div>
 
-          {/* ─ Nav links + Cart ─────────────── */}
-          <div className="flex items-center justify-end gap-element-gap flex-1">
+          {/* ─── Acciones derecha ──────────────────────────────────── */}
+          <div className="flex items-center justify-end gap-1 md:gap-3 flex-1">
+            {/* Buscador mobile (ícono) */}
+            <button
+              className="md:hidden p-2 text-text-secondary hover:text-belia-red transition-colors"
+              aria-label="Buscar"
+            >
+              <span className="material-symbols-outlined text-[22px]">search</span>
+            </button>
+
+            {/* Acceso estilistas */}
             <Link
               to="/proveedores"
-              className="hidden md:inline-flex text-sm text-text-secondary hover:text-belia-red transition-colors"
+              className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
             >
-              Acceso Estilistas
+              <span className="material-symbols-outlined text-[16px]">storefront</span>
+              Estilistas
             </Link>
+
+            {/* Mi cuenta */}
+            <Link
+              to="/cuenta"
+              className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
+            >
+              <span className="material-symbols-outlined text-[20px]">person</span>
+              <span className="hidden lg:inline">Mi cuenta</span>
+            </Link>
+
+            {/* Carrito */}
             <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.92 }}
               onClick={() => setIsCartOpen(true)}
-              className="p-2 text-text-primary hover:text-belia-red transition-colors relative"
+              className="relative flex items-center justify-center p-2 text-text-secondary hover:text-belia-red transition-colors rounded-full hover:bg-belia-blush"
               aria-label={`Carrito: ${cartItemCount} productos`}
             >
-              <span className="material-symbols-outlined">shopping_cart</span>
-              {cartItemCount > 0 && (
-                <motion.span
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  key={cartItemCount}
-                  transition={{ type: 'spring', stiffness: 300, damping: 10 }}
-                  className="absolute top-0 right-0 bg-belia-red text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center"
-                >
-                  {cartItemCount}
-                </motion.span>
-              )}
+              <span className="material-symbols-outlined text-[22px]">shopping_bag</span>
+              <AnimatePresence>
+                {cartItemCount > 0 && (
+                  <motion.span
+                    key={cartItemCount}
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 15 }}
+                    className="absolute -top-0.5 -right-0.5 bg-belia-red text-white text-[10px] font-bold w-[18px] h-[18px] rounded-full flex items-center justify-center"
+                  >
+                    {cartItemCount > 9 ? '9+' : cartItemCount}
+                  </motion.span>
+                )}
+              </AnimatePresence>
             </motion.button>
           </div>
         </div>
 
-        {/* ─ Mega-menu nav bar ─────────────── */}
+        {/* ─── Mega-menú nav bar ─────────────────────────────────────── */}
         {!loading && categoryTree.length > 0 && (
           <nav
-            className="hidden md:flex border-t border-divider"
-            onMouseLeave={() => setActiveCategory(null)}
+            className="hidden md:block border-t border-divider bg-white"
+            onMouseLeave={handleMouseLeave}
           >
-            <div className="flex items-center gap-6 px-margin max-w-7xl mx-auto w-full">
+            <div className="flex items-center px-4 md:px-8 max-w-7xl mx-auto w-full gap-1">
+              {/* Link "Todos" */}
+              <Link
+                to="/categoria/todos"
+                className="py-3 px-3 text-[13px] font-semibold text-text-secondary hover:text-belia-red transition-colors whitespace-nowrap relative group"
+              >
+                Ver todo
+                <span className="absolute bottom-0 left-3 right-3 h-[2px] bg-belia-red scale-x-0 group-hover:scale-x-100 transition-transform duration-250 ease-spring origin-left rounded-full" />
+              </Link>
+
               {categoryTree.map((cat) => (
                 <div
                   key={cat.id}
                   className="relative"
-                  onMouseEnter={() => setActiveCategory(cat.id)}
+                  onMouseEnter={() => handleMouseEnter(cat.id)}
                 >
                   <Link
                     to={`/categoria/${cat.slug}`}
-                    className="inline-block py-3 text-sm font-medium text-text-secondary hover:text-belia-red transition-colors"
+                    className={`py-3 px-3 text-[13px] font-semibold transition-colors whitespace-nowrap relative group inline-block ${
+                      activeCategory === cat.id
+                        ? 'text-belia-red'
+                        : 'text-text-secondary hover:text-belia-red'
+                    }`}
                   >
                     {cat.name}
+                    <span className={`absolute bottom-0 left-3 right-3 h-[2px] bg-belia-red transition-transform duration-250 ease-spring origin-left rounded-full ${
+                      activeCategory === cat.id ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                    }`} />
                   </Link>
-
-                  {/* Mega-menu dropdown */}
-                  <AnimatePresence>
-                    {activeCategory === cat.id && cat.children.length > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 8 }}
-                        transition={{ duration: 0.18 }}
-                        className="absolute left-0 top-full bg-white border border-divider rounded-lg shadow-lg p-4 min-w-[200px] z-50"
-                      >
-                        {cat.children.map((sub) => (
-                          <Link
-                            key={sub.id}
-                            to={`/categoria/${sub.slug}`}
-                            className="block py-2 px-3 text-sm text-text-secondary hover:text-belia-red hover:bg-surface-container rounded transition-colors"
-                          >
-                            {sub.name}
-                          </Link>
-                        ))}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
                 </div>
               ))}
+
+              {/* Divisor + Ofertas */}
+              <div className="ml-auto">
+                <Link
+                  to="/categoria/todos?promo=true"
+                  className="py-3 px-3 text-[13px] font-bold text-belia-red hover:text-belia-coral transition-colors whitespace-nowrap"
+                >
+                  🔥 Ofertas
+                </Link>
+              </div>
             </div>
           </nav>
         )}
-      </motion.header>
 
-      {/* ─ Mobile Menu ──────────────────────── */}
+        {/* ─── Mega-menú panel completo (tipo Sephora) ──────────────── */}
+        <AnimatePresence>
+          {activeCategory && activecat && activecat.children.length > 0 && (
+            <motion.div
+              ref={megaMenuRef}
+              key={activeCategory}
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+              className="absolute left-0 right-0 top-full bg-white shadow-mega-menu border-t border-divider z-40"
+              onMouseEnter={handleMegaMenuEnter}
+              onMouseLeave={handleMouseLeave}
+            >
+              <div className="max-w-7xl mx-auto px-8 py-8 flex gap-12">
+                {/* Columna de subcategorías */}
+                <div className="flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.15em] text-belia-gray mb-4">
+                    {activecat.name}
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-8 gap-y-1">
+                    {activecat.children.map((sub, i) => (
+                      <motion.div
+                        key={sub.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: i * 0.04, duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                      >
+                        <Link
+                          to={`/categoria/${sub.slug}`}
+                          onClick={() => setActiveCategory(null)}
+                          className="flex items-center gap-2 py-2 px-3 rounded-lg text-sm text-text-secondary hover:text-belia-red hover:bg-belia-blush transition-colors group"
+                        >
+                          <span className="w-1 h-1 rounded-full bg-belia-coral opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
+                          {sub.name}
+                        </Link>
+                      </motion.div>
+                    ))}
+                  </div>
+
+                  {/* Ver todo la categoría */}
+                  <Link
+                    to={`/categoria/${activecat.slug}`}
+                    onClick={() => setActiveCategory(null)}
+                    className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold text-belia-red hover:text-belia-coral transition-colors"
+                  >
+                    Ver todo en {activecat.name}
+                    <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
+                  </Link>
+                </div>
+
+                {/* Panel editorial derecho */}
+                <div className="hidden lg:flex flex-col justify-between w-56 xl:w-64 flex-shrink-0">
+                  <div className="rounded-2xl bg-belia-gradient-soft border border-belia-pink/20 p-5 h-full flex flex-col justify-between">
+                    <div>
+                      <span className="belia-eyebrow text-[9px] mb-2 inline-flex">Destacado</span>
+                      <p className="text-sm font-bold text-belia-charcoal leading-tight mt-2">
+                        Descubre lo mejor de {activecat.name}
+                      </p>
+                      <p className="text-xs text-text-secondary mt-1.5">
+                        Productos seleccionados por nuestros expertos
+                      </p>
+                    </div>
+                    <Link
+                      to={`/categoria/${activecat.slug}`}
+                      onClick={() => setActiveCategory(null)}
+                      className="mt-4 btn-primary text-xs py-2 px-4 self-start"
+                    >
+                      Explorar
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      {/* ─── Mobile Menu ─────────────────────────────────────────────── */}
       <MobileMenu
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
