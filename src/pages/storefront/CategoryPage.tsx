@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { useProducts } from '../../hooks/useProducts';
 import { useCategories } from '../../hooks/useCategories';
 import { useAuth } from '../../hooks/useAuth';
@@ -11,11 +11,11 @@ import type { SupplierProduct } from '../../types/database';
 
 type ViewMode = 'grid' | 'list';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.05 } },
 };
-const itemVariants = {
+const itemVariants: Variants = {
   hidden:  { opacity: 0, y: 12 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: "easeOut" } },
 };

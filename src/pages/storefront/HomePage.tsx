@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useInView } from 'framer-motion';
+import { motion, useInView, Variants } from 'framer-motion';
 import { useProducts } from '../../hooks/useProducts';
 import { ProductCard } from '../../components/catalog/ProductCard';
 import { useAuth } from '../../hooks/useAuth';
@@ -8,11 +8,11 @@ import { supabase } from '../../lib/supabase';
 import type { SupplierProduct } from '../../types/database';
 
 /* ─── Animation variants ──────────────────────────────────────── */
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.08 } },
 };
-const itemVariants = {
+const itemVariants: Variants = {
   hidden:  { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
 };
