@@ -352,20 +352,6 @@ export function HomePage() {
                 </div>
               </motion.div>
 
-              {/* Secondary Floating Orb */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1, y: [10, -15, 10] }}
-                transition={{ 
-                  opacity: { delay: 0.6, duration: 0.8 },
-                  scale: { delay: 0.6, duration: 0.8, ease: "easeOut" },
-                  y: { duration: 5, repeat: Infinity, ease: 'easeInOut', delay: 1.5 }
-                }}
-                className="absolute bottom-1/4 right-8 w-32 h-32 rounded-full bg-gradient-to-tr from-belia-red/80 to-[#FF8FA3]/80 backdrop-blur-lg flex items-center justify-center shadow-belia-xl border border-white/30 z-30"
-              >
-                 <span className="material-symbols-outlined text-white text-[40px]" style={{ transform: 'translateZ(10px)' }}>diamond</span>
-              </motion.div>
-
             </div>
           </div>
         </div>
