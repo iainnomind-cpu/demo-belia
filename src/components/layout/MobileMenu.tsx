@@ -10,13 +10,14 @@ interface MobileMenuProps {
   isOpen: boolean;
   onClose: () => void;
   categoryTree: CategoryTree[];
+  onOpenAuth: () => void;
 }
 
 /**
  * MobileMenu — Full-screen slide-in menu for mobile viewports (≤ 375px).
  * Premium glassmorphism overlay, spring physics, and Sephora-like taxonomy.
  */
-export function MobileMenu({ isOpen, onClose, categoryTree }: MobileMenuProps) {
+export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: MobileMenuProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -119,21 +120,20 @@ export function MobileMenu({ isOpen, onClose, categoryTree }: MobileMenuProps) {
                 </Link>
 
                 <div className="grid grid-cols-2 gap-3 pt-4 border-t border-divider">
-                  <Link
-                    to="/cuenta"
-                    onClick={onClose}
+                  <button
+                    onClick={() => { onClose(); onOpenAuth(); }}
                     className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border border-divider text-text-secondary hover:border-belia-coral hover:text-belia-red transition-colors"
                   >
                     <span className="material-symbols-outlined text-[20px]">person</span>
                     <span className="text-xs font-semibold">Mi Cuenta</span>
-                  </Link>
+                  </button>
                   <Link
                     to="/proveedores"
                     onClick={onClose}
                     className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border border-divider text-text-secondary hover:border-belia-coral hover:text-belia-red transition-colors"
                   >
                     <span className="material-symbols-outlined text-[20px]">storefront</span>
-                    <span className="text-xs font-semibold">Estilistas</span>
+                    <span className="text-xs font-semibold">Profesionales</span>
                   </Link>
                 </div>
               </motion.div>

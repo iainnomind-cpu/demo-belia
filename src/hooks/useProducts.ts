@@ -20,7 +20,7 @@ interface UseProductsReturn {
   error: string | null;
   loadMore: () => void;
   filters: ProductFilters;
-  setFilters: (filters: ProductFilters) => void;
+  setFilters: (filters: ProductFilters | ((prev: ProductFilters) => ProductFilters)) => void;
 }
 
 /**
@@ -107,9 +107,12 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     void fetchMore();
   }, [loadingMore, hasMore, offset, buildQuery]);
 
-  const updateFilters = useCallback((newFilters: ProductFilters) => {
-    setFilters(newFilters);
-  }, []);
+  const updateFilters = useCallback(
+    (newFilters: ProductFilters | ((prev: ProductFilters) => ProductFilters)) => {
+      setFilters(newFilters);
+    },
+    []
+  );
 
   return { products, loading, loadingMore, hasMore, error, loadMore, filters, setFilters: updateFilters };
 }

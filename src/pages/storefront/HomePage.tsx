@@ -191,7 +191,7 @@ export function HomePage() {
         <div className="absolute right-0 top-0 bottom-0 w-full lg:w-[55%] z-0">
           <img
             src="https://images.unsplash.com/photo-1571875257727-256c39da42af?auto=format&fit=crop&w=1600&q=85"
-            alt="Productos de belleza profesional"
+            alt="🌸 100% Productos Originales · Profesionales de la belleza"
             className="w-full h-full object-cover scale-[1.02]"
             fetchPriority="high"
           />
@@ -288,11 +288,11 @@ export function HomePage() {
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-belia-red text-[18px]">local_shipping</span>
-                  Envío Gratis +$499
+                  Envío rápido y seguro
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="material-symbols-outlined text-belia-red text-[18px]">group</span>
-                  Para todos: hogar y salón
+                  Para todos: hogar y profesionales
                 </span>
               </motion.div>
 
@@ -480,10 +480,10 @@ export function HomePage() {
                     <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-belia-coral">Para Profesionales</span>
                   </div>
                   <h2 className="text-2xl md:text-3xl font-bold text-white leading-tight mb-2">
-                    ¿Eres estilista<br className="hidden md:block" /> o dueño de salón?
+                    ¿Eres parte del mundo<br className="hidden md:block" /> profesional de la belleza?
                   </h2>
                   <p className="text-white/60 text-[14px] max-w-md leading-relaxed">
-                    Obtén precios especiales de proveedor, pedidos al mayoreo y atención personalizada para tu negocio.
+                    Obtén precios de mayoreo, pedidos al por mayor y atención personalizada para tu negocio.
                   </p>
                 </div>
                 <Link
@@ -564,13 +564,13 @@ export function HomePage() {
                 Buscar tintes
               </Link>
               <a
-                href="https://wa.me/521XXXXXXXXXX?text=Hola%2C%20necesito%20asesor%C3%ADa%20para%20elegir%20un%20tinte"
+                href="https://wa.me/523380007919?text=Hola%2C%20me%20interesa%20un%20tinte%20y%20necesito%20orientaci%C3%B3n"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-secondary text-sm px-6"
               >
                 <span className="material-symbols-outlined text-[16px]">chat</span>
-                Asesoría gratis
+                Contáctanos por WhatsApp
               </a>
             </div>
           </motion.div>

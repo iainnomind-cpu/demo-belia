@@ -75,11 +75,19 @@ export function CategoryPage() {
   });
 
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
+  // Cache de marcas vistas: se acumula aunque el filtro de precio reduzca los productos.
+  const [allSeenBrands, setAllSeenBrands] = useState<Set<string>>(new Set());
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Sync filters when route changes
+  // Sync categoryId and searchQuery when route changes, but PRESERVE brand/price filters
   useEffect(() => {
-    setFilters({ ...filters, categoryId, searchQuery: query ?? undefined });
+    setFilters((prev) => ({
+      ...prev,
+      categoryId,
+      searchQuery: query ?? undefined,
+    }));
+    // Reset brand cache when category/search changes
+    setAllSeenBrands(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, query]);
 
@@ -115,10 +123,17 @@ export function CategoryPage() {
     ? displayProducts.filter(p => !!p.price_promo)
     : displayProducts;
 
-  const uniqueBrands = useMemo(
-    () => Array.from(new Set(products.map(p => p.brand).filter(Boolean) as string[])).sort(),
-    [products]
-  );
+  // Acumula marcas de todos los productos vistos para que no desaparezcan al filtrar
+  const uniqueBrands = useMemo(() => {
+    const newBrands = products.map(p => p.brand).filter(Boolean) as string[];
+    setAllSeenBrands(prev => {
+      const updated = new Set(prev);
+      newBrands.forEach(b => updated.add(b));
+      return updated;
+    });
+    return Array.from(allSeenBrands).sort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products]);
 
   const categoryName = slug === 'todos'
     ? (query ? `Resultados para "${query}"` : promoOnly ? '🔥 Ofertas Especiales' : 'Todos los productos')

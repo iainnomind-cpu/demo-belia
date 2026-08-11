@@ -8,6 +8,8 @@ interface UseAuthReturn {
   session: Session | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  signInWithOAuth: (provider: 'google' | 'facebook') => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -46,11 +48,26 @@ export function useAuth(): UseAuthReturn {
     return { error: null };
   };
 
+  const signUp = async (email: string, password: string): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) return { error: error.message };
+    return { error: null };
+  };
+
+  const signInWithOAuth = async (provider: 'google' | 'facebook'): Promise<{ error: string | null }> => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: window.location.origin },
+    });
+    if (error) return { error: error.message };
+    return { error: null };
+  };
+
   const signOut = async (): Promise<void> => {
     await supabase.auth.signOut();
   };
 
-  return { user, session, loading, signIn, signOut };
+  return { user, session, loading, signIn, signUp, signInWithOAuth, signOut };
 }
 
 function buildAuthUser(session: Session): AuthUser {

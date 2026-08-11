@@ -13,7 +13,7 @@ export const products: Product[] = [
     brand: "Aurum Botanics",
     name: "Restorative Hair Oil - Argan 50ml",
     price: 850.00,
-    badge: "Envío Gratis",
+    badge: "Nuevo",
     image: "https://lh3.googleusercontent.com/aida-public/AB6AXuATGMbZ7t31Sb0Myew26iAb9JSr892izi0kF6yeb4Qrp2DwOGu7IE1GkrMhLk_-h6tLLKa5-Y2THx5rgchpfFcSvK630quyCPIJ4LoBXOjbrfQ4uUm1NzGgK9oAjuR0QD90c8asy15OXxYST7j-st4M3oUfATM8KB5ALb21zcC1kJ6OgFSNjQQG8iZzWJ0An9LC9rlgL9z-NL7MlcXE9HGozUvM2M2RTpaBnAC9b9cF9_i-rlmrGmXaxRgihWFfEyuCdDUL_wD4kbs"
   },
   {

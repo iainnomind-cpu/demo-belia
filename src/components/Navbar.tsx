@@ -31,7 +31,7 @@ export function Navbar() {
           <a className="font-label-md text-sm text-text-secondary hover:text-belia-red transition-colors" href="#">Marcas</a>
         </nav>
         <div className="flex items-center justify-end gap-element-gap flex-1">
-          <a className="hidden md:inline-flex text-sm text-text-secondary hover:text-belia-red transition-colors" href="#">Acceso Estilistas</a>
+          <a className="hidden md:inline-flex text-sm text-text-secondary hover:text-belia-red transition-colors" href="#">Acceso Profesionales</a>
           <motion.button 
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}

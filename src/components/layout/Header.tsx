@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCategories } from '../../hooks/useCategories';
 import { useCartStore } from '../../store/cartStore';
+import { useAuth } from '../../hooks/useAuth';
 import { MobileMenu } from './MobileMenu';
+import { AuthModal } from '../auth/AuthModal';
 
 /**
  * Header — Belia premium header con mega-menú tipo Sephora.
@@ -16,8 +18,10 @@ import { MobileMenu } from './MobileMenu';
 export function Header() {
   const { categoryTree, loading } = useCategories();
   const { items, setIsCartOpen } = useCartStore();
+  const { user, signOut } = useAuth();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
@@ -65,7 +69,7 @@ export function Header() {
       >
         {/* ─── Top bar: promo / info ─────────────────────────────── */}
         <div className="bg-belia-red text-white text-center py-2 px-4 text-[11px] font-medium tracking-wide hidden md:block">
-          🌸 Envío gratis en compras mayores a $499 · Productos de belleza profesional
+          🌸 100% Marcas Originales · Profesionales de la belleza
         </div>
 
         {/* ─── Main header row ────────────────────────────────────── */}
@@ -122,23 +126,33 @@ export function Header() {
               <span className="material-symbols-outlined text-[22px]">search</span>
             </button>
 
-            {/* Acceso estilistas */}
+            {/* Acceso profesionales */}
             <Link
               to="/proveedores"
               className="hidden lg:inline-flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
             >
               <span className="material-symbols-outlined text-[16px]">storefront</span>
-              Estilistas
+              Profesionales
             </Link>
 
-            {/* Mi cuenta */}
-            <Link
-              to="/cuenta"
-              className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
-            >
-              <span className="material-symbols-outlined text-[20px]">person</span>
-              <span className="hidden lg:inline">Mi cuenta</span>
-            </Link>
+            {/* Mi cuenta — abre modal o muestra opciones si ya está logueado */}
+            {user ? (
+              <button
+                onClick={() => void signOut()}
+                className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
+              >
+                <span className="material-symbols-outlined text-[20px]">person</span>
+                <span className="hidden lg:inline">Cerrar sesión</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => setIsAuthModalOpen(true)}
+                className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
+              >
+                <span className="material-symbols-outlined text-[20px]">person</span>
+                <span className="hidden lg:inline">Mi cuenta</span>
+              </button>
+            )}
 
             {/* Carrito */}
             <motion.button
@@ -300,6 +314,13 @@ export function Header() {
         isOpen={isMobileMenuOpen}
         onClose={() => setIsMobileMenuOpen(false)}
         categoryTree={categoryTree}
+        onOpenAuth={() => setIsAuthModalOpen(true)}
+      />
+
+      {/* ─── Auth Modal ──────────────────────────────────────────────── */}
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </>
   );
