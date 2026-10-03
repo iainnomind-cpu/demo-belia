@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Navigate, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { useAuth } from '../../hooks/useAuth';
@@ -7,18 +7,34 @@ import { useCartStore } from '../../store/cartStore';
 import { supabase } from '../../lib/supabase';
 
 // Inicializar Stripe con la llave pública
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder');
+const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY as string | undefined;
+const stripePromise = STRIPE_PUBLIC_KEY ? loadStripe(STRIPE_PUBLIC_KEY) : null;
 
-function CheckoutForm({ 
-  clientSecret, 
-  shippingAddress, 
-  totalAmount, 
-  shippingCost 
-}: { 
-  clientSecret: string, 
-  shippingAddress: any, 
-  totalAmount: number, 
-  shippingCost: number 
+type ShippingAddress = { street: string; city: string; state: string; zip: string; country: string };
+const ADDRESS_STORAGE_KEY = 'belia-checkout-address';
+
+// The order is created server-side from the verified Stripe payment
+async function confirmOrder(paymentIntentId: string, shippingAddress: ShippingAddress) {
+  const { error } = await supabase.functions.invoke('confirm-order', {
+    body: { payment_intent_id: paymentIntentId, shipping_address: shippingAddress },
+  });
+  if (error) {
+    const ctx = (error as { context?: Response }).context;
+    const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+    throw new Error(body?.error ?? error.message);
+  }
+}
+
+function CheckoutForm({
+  clientSecret,
+  shippingAddress,
+  totalAmount,
+  shippingCost
+}: {
+  clientSecret: string,
+  shippingAddress: ShippingAddress,
+  totalAmount: number,
+  shippingCost: number
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -28,13 +44,19 @@ function CheckoutForm({
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const formatPrice = (price: number) => 
+  const formatPrice = (price: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
 
   const handlePayment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!stripe || !elements || items.length === 0 || !user) return;
-    
+
+    const { street, city, state, zip } = shippingAddress;
+    if (!street.trim() || !city.trim() || !state.trim() || !/^\d{5}$/.test(zip.trim())) {
+      setError('Completa la dirección de envío (el código postal debe tener 5 dígitos) antes de pagar.');
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
 
@@ -42,11 +64,14 @@ function CheckoutForm({
       const { error: submitError } = await elements.submit();
       if (submitError) throw submitError;
 
+      // Needed if Stripe redirects (3D Secure, etc.) and we come back to /checkout
+      try { sessionStorage.setItem(ADDRESS_STORAGE_KEY, JSON.stringify(shippingAddress)); } catch { /* private mode */ }
+
       const result = await stripe.confirmPayment({
         elements,
         clientSecret,
         confirmParams: {
-          return_url: window.location.origin + '/checkout/success',
+          return_url: window.location.origin + '/checkout',
           payment_method_data: {
             billing_details: {
               address: {
@@ -67,32 +92,15 @@ function CheckoutForm({
       }
 
       if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-        // Crear Orden en Supabase (Solo como fallback si no se usan webhooks, lo cual es el caso para este MVP)
-        const { data: order, error: orderError } = await (supabase.from('orders') as any).insert({
-          user_id: user?.id,
-          tipo: user.role === 'proveedor' ? 'mayoreo' : 'publico',
-          status: 'Procesando',
-          total_amount: totalAmount,
-          shipping_address: shippingAddress,
-          stripe_payment_intent: result.paymentIntent.id
-        }).select().single();
+        try {
+          await confirmOrder(result.paymentIntent.id, shippingAddress);
+        } catch (orderErr) {
+          // The card WAS charged: never tell the customer to pay again
+          const msg = orderErr instanceof Error ? orderErr.message : String(orderErr);
+          throw new Error(`Tu pago se realizó correctamente, pero hubo un problema registrando el pedido (${msg}). Contáctanos con este folio: ${result.paymentIntent.id}`);
+        }
 
-        if (orderError) throw orderError;
-
-        // Crear Order Items
-        const orderItems = items.map(item => {
-          const currentPrice = item.price_proveedor || item.price_promo || item.price_publico;
-          return {
-            order_id: order.id,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            unit_price: currentPrice
-          };
-        });
-
-        const { error: itemsError } = await (supabase.from('order_items') as any).insert(orderItems);
-        if (itemsError) throw itemsError;
-
+        try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }
         clearCart();
         setCheckoutSuccess(true);
         navigate('/'); // Redirigir a inicio con éxito
@@ -115,7 +123,7 @@ function CheckoutForm({
       <div className="flex-1">
         <div className="bg-white rounded-xl border border-divider p-8 shadow-sm">
           <h1 className="font-headline-lg text-3xl font-bold text-text-primary mb-8">Checkout</h1>
-          
+
           {error && (
             <div className="bg-error/10 border border-error text-error p-4 rounded-lg mb-6 flex items-start gap-3">
               <span className="material-symbols-outlined">error</span>
@@ -127,7 +135,7 @@ function CheckoutForm({
             <h3 className="font-headline-sm font-bold text-lg text-text-primary mb-4 pb-2 border-b border-divider">
               Pago con Tarjeta
             </h3>
-            
+
             <div className="bg-surface-dim rounded-lg p-6 mb-8 border border-divider">
               <PaymentElement />
             </div>
@@ -139,7 +147,7 @@ function CheckoutForm({
       <div className="w-full lg:w-[400px]">
         <div className="bg-white rounded-xl border border-divider p-6 sticky top-24 shadow-sm">
           <h3 className="font-headline-sm font-bold text-xl text-text-primary mb-6">Resumen de Orden</h3>
-          
+
           <div className="space-y-4 mb-6 max-h-[40vh] overflow-y-auto pr-2">
             {items.map(item => {
               const currentPrice = item.price_proveedor || item.price_promo || item.price_publico;
@@ -173,7 +181,7 @@ function CheckoutForm({
             </div>
           </div>
 
-          <button 
+          <button
             form="checkout-form"
             type="submit"
             disabled={!stripe || isProcessing}
@@ -203,24 +211,60 @@ function CheckoutForm({
 
 export function CheckoutPage() {
   const { user, loading } = useAuth();
-  const { items } = useCartStore();
-  
-  const [shippingAddress, setShippingAddress] = useState({
+  const { items, clearCart, setCheckoutSuccess } = useCartStore();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const returnedPaymentIntent = searchParams.get('payment_intent');
+  const redirectStatus = searchParams.get('redirect_status');
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
+
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
     street: '',
     city: '',
     state: '',
     zip: '',
     country: 'MX'
   });
-  
+
   const [clientSecret, setClientSecret] = useState('');
   const [totalAmount, setTotalAmount] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
 
+  // Coming back from a Stripe redirect (3D Secure, etc.)
   useEffect(() => {
-    if (!user || items.length === 0) return;
+    if (!user || !returnedPaymentIntent) return;
+    if (redirectStatus !== 'succeeded') {
+      setFinalizeError('El pago no se completó. Puedes intentarlo de nuevo.');
+      return;
+    }
+    let saved: ShippingAddress | null = null;
+    try { saved = JSON.parse(sessionStorage.getItem(ADDRESS_STORAGE_KEY) ?? 'null'); } catch { /* ignore */ }
+    if (!saved) {
+      setFinalizeError(`Tu pago se realizó, pero no encontramos la dirección de envío. Contáctanos con este folio: ${returnedPaymentIntent}`);
+      return;
+    }
+    confirmOrder(returnedPaymentIntent, saved)
+      .then(() => {
+        try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }
+        clearCart();
+        setCheckoutSuccess(true);
+        navigate('/', { replace: true });
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setFinalizeError(`Tu pago se realizó, pero hubo un problema registrando el pedido (${msg}). Contáctanos con este folio: ${returnedPaymentIntent}`);
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, returnedPaymentIntent, redirectStatus]);
+
+  useEffect(() => {
+    if (!user || items.length === 0 || returnedPaymentIntent) return;
+    if (!stripePromise) {
+      setFetchError('El pago con tarjeta aún no está configurado (falta VITE_STRIPE_PUBLIC_KEY).');
+      return;
+    }
 
     const initPayment = async () => {
       setIsInitializing(true);
@@ -230,7 +274,7 @@ export function CheckoutPage() {
         if (!session) throw new Error('No session');
 
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://localhost:54321';
-        
+
         const response = await fetch(`${supabaseUrl}/functions/v1/create-payment-intent`, {
           method: 'POST',
           headers: {
@@ -238,13 +282,12 @@ export function CheckoutPage() {
             'Authorization': `Bearer ${session.access_token}`
           },
           body: JSON.stringify({
-            items,
-            shipping_address: shippingAddress
+            items: items.map(i => ({ product_id: i.product_id, quantity: i.quantity, name: i.name })),
           })
         });
 
         const data = await response.json();
-        
+
         if (!response.ok) {
           if (response.status === 409 && data.error === 'INSUFFICIENT_STOCK') {
             const details = data.details.map((d: any) => `${d.name} (Disp: ${d.available})`).join(', ');
@@ -278,6 +321,24 @@ export function CheckoutPage() {
     return <Navigate to="/login" replace state={{ from: '/checkout' }} />;
   }
 
+  if (returnedPaymentIntent) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center px-4 text-center">
+        {finalizeError ? (
+          <div className="bg-error/10 border border-error text-error p-6 rounded-xl max-w-lg">
+            <p className="font-medium">{finalizeError}</p>
+            <Link to="/checkout" className="inline-block mt-4 text-belia-red font-bold hover:underline">Volver al checkout</Link>
+          </div>
+        ) : (
+          <>
+            <div className="animate-spin h-10 w-10 border-t-4 border-belia-red rounded-full mb-4"></div>
+            <p className="text-text-secondary font-medium">Confirmando tu pedido...</p>
+          </>
+        )}
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center bg-surface-bright">
@@ -293,7 +354,7 @@ export function CheckoutPage() {
   return (
     <div className="min-h-screen bg-surface-bright py-12">
       <div className="max-w-7xl mx-auto px-margin">
-        
+
         {fetchError && (
           <div className="bg-error/10 border border-error text-error p-6 rounded-xl mb-8">
             <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
@@ -346,9 +407,9 @@ export function CheckoutPage() {
             </div>
 
             <Elements options={{ clientSecret, appearance: { theme: 'stripe', variables: { colorPrimary: '#E31B23' } } }} stripe={stripePromise}>
-              <CheckoutForm 
-                clientSecret={clientSecret} 
-                shippingAddress={shippingAddress} 
+              <CheckoutForm
+                clientSecret={clientSecret}
+                shippingAddress={shippingAddress}
                 totalAmount={totalAmount}
                 shippingCost={shippingCost}
               />

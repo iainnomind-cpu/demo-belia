@@ -10,7 +10,7 @@ export function SupplierFormPage() {
     rfc: '',
     category_interest: ''
   });
-  
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,8 +33,13 @@ export function SupplierFormPage() {
           status: 'pendiente'
         } as any);
 
-      if (insertError) throw insertError;
-      
+      if (insertError) {
+        if (insertError.code === '23505') {
+          throw new Error('Ya existe una solicitud registrada con este correo. Te contactaremos pronto.');
+        }
+        throw insertError;
+      }
+
       setSuccess(true);
     } catch (err: any) {
       setError(err.message || 'Error al enviar la solicitud. Por favor intenta de nuevo.');
@@ -95,7 +100,7 @@ export function SupplierFormPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-text-primary mb-1">Nombre del Salón o Empresa *</label>
-                <input 
+                <input
                   type="text" required
                   value={formData.company_name}
                   onChange={e => setFormData({...formData, company_name: e.target.value})}
@@ -105,7 +110,7 @@ export function SupplierFormPage() {
 
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">Nombre del Contacto *</label>
-                <input 
+                <input
                   type="text" required
                   value={formData.contact_name}
                   onChange={e => setFormData({...formData, contact_name: e.target.value})}
@@ -115,8 +120,8 @@ export function SupplierFormPage() {
 
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">RFC (Opcional)</label>
-                <input 
-                  type="text" 
+                <input
+                  type="text"
                   value={formData.rfc}
                   onChange={e => setFormData({...formData, rfc: e.target.value})}
                   className="w-full border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red uppercase"
@@ -126,7 +131,7 @@ export function SupplierFormPage() {
 
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">Correo Electrónico *</label>
-                <input 
+                <input
                   type="email" required
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
@@ -136,7 +141,7 @@ export function SupplierFormPage() {
 
               <div>
                 <label className="block text-sm font-medium text-text-primary mb-1">Teléfono (WhatsApp) *</label>
-                <input 
+                <input
                   type="tel" required
                   value={formData.phone}
                   onChange={e => setFormData({...formData, phone: e.target.value})}
@@ -146,7 +151,7 @@ export function SupplierFormPage() {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-text-primary mb-1">¿Qué categorías de productos te interesan principalmente?</label>
-                <textarea 
+                <textarea
                   rows={3}
                   value={formData.category_interest}
                   onChange={e => setFormData({...formData, category_interest: e.target.value})}

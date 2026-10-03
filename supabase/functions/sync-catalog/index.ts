@@ -11,6 +11,8 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const GOOGLE_SHEETS_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
 const GOOGLE_SHEET_ID = Deno.env.get('GOOGLE_SHEET_ID');
 const GOOGLE_SHEET_TAB = Deno.env.get('GOOGLE_SHEET_TAB') ?? 'PLANTILLA BELIA';
+// Stock for NEW products whose Stock cell is empty (existing products keep theirs)
+const DEFAULT_STOCK_WHEN_EMPTY = Number(Deno.env.get('DEFAULT_STOCK_WHEN_EMPTY') ?? '100');
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -40,7 +42,7 @@ interface SheetRow {
   category_id: string | null;
   price_publico: number;
   price_promo: number | null;
-  stock: number;
+  stock: number | null; // null = empty cell in the sheet
   image_url: string | null;
 }
 
@@ -57,6 +59,13 @@ function parseMoney(value: string | undefined): number | null {
   if (!cleaned) return null;
   const n = parseFloat(cleaned);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+// "" → null (keep current stock) ; "12" → 12 ; "-3" → 0
+function parseStock(value: string | undefined): number | null {
+  const cleaned = (value ?? '').replace(/[^0-9-]/g, '');
+  if (!cleaned) return null;
+  return Math.max(0, parseInt(cleaned, 10) || 0);
 }
 
 // Treat spreadsheet error values (#N/D, #N/A, #REF!...) as empty
@@ -267,7 +276,7 @@ serve(async (req) => {
         category_id: await resolveCategory(cleanText(row[COL.category]), cleanText(row[COL.subcategory])),
         price_publico: pricePublico,
         price_promo: parseMoney(row[COL.promo]),
-        stock: Math.max(0, parseInt((row[COL.stock] ?? '').replace(/[^0-9-]/g, ''), 10) || 0),
+        stock: parseStock(row[COL.stock]),
         image_url: images.find((u) => u !== null) ?? null,
       });
     }
@@ -308,6 +317,7 @@ serve(async (req) => {
         continue;
       }
       const changed = !existing.is_active || SHEET_FIELDS.some((f) => {
+        if (f === 'stock' && row.stock === null) return false; // empty cell: keep current stock
         const a = existing[f] ?? null;
         const b = row[f] ?? null;
         // NUMERIC columns may come back as strings
@@ -365,13 +375,21 @@ serve(async (req) => {
     // ── 7. Apply diff ─────────────────────────────────────────
     // Upsert by SKU only writes the sheet-managed columns, so price_proveedor
     // and featured_label edited in the admin are preserved.
-    const upsertRows = [...toInsert, ...toUpdate].map((r) => ({ ...r, is_active: true, source: 'sheet' }));
+    // Each upsert batch must have the same columns, so rows that keep their
+    // current stock (empty cell) go in a separate batch without the stock column.
+    const base = { is_active: true, source: 'sheet' };
+    const inserts = toInsert.map((r) => ({ ...r, ...base, stock: r.stock ?? DEFAULT_STOCK_WHEN_EMPTY }));
+    const updatesWithStock = toUpdate.filter((r) => r.stock !== null).map((r) => ({ ...r, ...base }));
+    const updatesKeepStock = toUpdate.filter((r) => r.stock === null).map(({ stock: _stock, ...r }) => ({ ...r, ...base }));
+
     const CHUNK = 500;
-    for (let i = 0; i < upsertRows.length; i += CHUNK) {
-      const { error } = await supabase
-        .from('products')
-        .upsert(upsertRows.slice(i, i + CHUNK), { onConflict: 'sku' });
-      if (error) throw new Error(`Upsert failed: ${error.message}`);
+    for (const batch of [inserts, updatesWithStock, updatesKeepStock]) {
+      for (let i = 0; i < batch.length; i += CHUNK) {
+        const { error } = await supabase
+          .from('products')
+          .upsert(batch.slice(i, i + CHUNK), { onConflict: 'sku' });
+        if (error) throw new Error(`Upsert failed: ${error.message}`);
+      }
     }
 
     // Deactivations (SOFT DELETE only — FR-018)

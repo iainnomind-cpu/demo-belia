@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useMemo } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { motion, type Variants } from 'framer-motion';
 import { useProducts } from '../../hooks/useProducts';
+import { getValidPromo } from '../../lib/pricing';
 import { useCategories } from '../../hooks/useCategories';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
@@ -96,16 +97,18 @@ export function CategoryPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId, categoryIdsKey, query]);
 
-  // Supplier prices
+  // Supplier prices — only for the products currently loaded (the RPC would
+  // otherwise return the whole catalog, capped at 1000 rows by the API)
+  const loadedIds = products.map(p => p.id).join(',');
   useEffect(() => {
-    if (user?.role === 'proveedor' || user?.role === 'admin') {
+    if ((user?.role === 'proveedor' || user?.role === 'admin') && loadedIds) {
       const fetchSupplierPrices = async () => {
-        const { data } = await (supabase.rpc as Function)('get_supplier_products', { category_id: categoryId });
+        const { data } = await supabase.rpc('get_supplier_products').in('id', loadedIds.split(','));
         if (data) setSupplierProducts(data);
       };
       void fetchSupplierPrices();
     }
-  }, [user, categoryId]);
+  }, [user, loadedIds]);
 
   // Infinite scroll
   useEffect(() => {
@@ -125,7 +128,7 @@ export function CategoryPage() {
   });
 
   const filteredProducts = promoOnly
-    ? displayProducts.filter(p => !!p.price_promo)
+    ? displayProducts.filter(p => getValidPromo(p.price_publico, p.price_promo) !== null)
     : displayProducts;
 
   // Acumula marcas de todos los productos vistos para que no desaparezcan al filtrar

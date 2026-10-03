@@ -12,6 +12,7 @@ interface ProductFilters {
   minPrice?: number;
   maxPrice?: number;
   searchQuery?: string;
+  featuredOnly?: boolean;
 }
 
 interface UseProductsReturn {
@@ -45,7 +46,14 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       .from('products')
       .select('id, sku, name, description, category_id, brand, price_publico, price_promo, stock, image_url, featured_label, is_active, source, created_at, updated_at')
       .eq('is_active', true)
+      // A stable order is required for range() pagination; without it pages can repeat or skip rows
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
+
+    if (filters.featuredOnly) {
+      query = query.not('featured_label', 'is', null);
+    }
 
     if (filters.categoryIds?.length) {
       query = query.in('category_id', filters.categoryIds);
@@ -62,9 +70,11 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       query = query.lte('price_publico', filters.maxPrice);
     }
     if (filters.searchQuery) {
-      query = query.or(
-        `name.ilike.%${filters.searchQuery}%,brand.ilike.%${filters.searchQuery}%,sku.ilike.%${filters.searchQuery}%`
-      );
+      // Commas, parentheses and wildcards would break the PostgREST or() syntax
+      const term = filters.searchQuery.replace(/[,()*%\\]/g, ' ').trim();
+      if (term) {
+        query = query.or(`name.ilike.%${term}%,brand.ilike.%${term}%,sku.ilike.%${term}%`);
+      }
     }
 
     return query;

@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { useCartStore } from '../../store/cartStore';
 import type { Product, SupplierProduct } from '../../types/database';
+import { getValidPromo } from '../../lib/pricing';
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
@@ -71,7 +72,7 @@ export function ProductDetailPage() {
 
       const { data, error: fetchErr } = await supabase
         .from('products')
-        .select('*')
+        .select('id, sku, name, description, category_id, brand, price_publico, price_promo, stock, image_url, featured_label, is_active, source, created_at, updated_at')
         .eq('id', id)
         .eq('is_active', true)
         .single();
@@ -85,8 +86,8 @@ export function ProductDetailPage() {
 
       // Supplier price via secure RPC
       if (user?.role === 'proveedor' || user?.role === 'admin') {
-        const { data: spData } = await supabase.rpc('get_supplier_products');
-        const sp = (spData as SupplierProduct[] | null)?.find(p => p.id === id);
+        const { data: spData } = await supabase.rpc('get_supplier_products').eq('id', id);
+        const sp = (spData as SupplierProduct[] | null)?.[0];
         if (sp?.price_proveedor) setSupplierPrice(sp.price_proveedor);
       }
 
@@ -118,8 +119,8 @@ export function ProductDetailPage() {
 
   if (supplierPrice) {
     displayPrice = supplierPrice;
-  } else if (product.price_promo) {
-    displayPrice = product.price_promo;
+  } else if (getValidPromo(product.price_publico, product.price_promo)) {
+    displayPrice = getValidPromo(product.price_publico, product.price_promo)!;
     originalPrice = product.price_publico;
   }
 
@@ -268,7 +269,7 @@ export function ProductDetailPage() {
               <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOutOfStock ? 'bg-error' : 'bg-success-green'}`} />
               {isOutOfStock
                 ? 'Sin stock — disponible pronto'
-                : `En stock · ${product.stock} unidades`}
+                : product.stock <= 10 ? `¡Últimas ${product.stock} unidades!` : 'En stock'}
             </div>
 
             {/* Quantity + CTA */}

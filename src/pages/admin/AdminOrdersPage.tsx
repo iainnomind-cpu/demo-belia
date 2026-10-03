@@ -8,14 +8,14 @@ export function AdminOrdersPage() {
 
   const fetchOrders = async () => {
     setLoading(true);
-    // Real implementation would join with users table for customer email, 
-    // for now we just show user_id or handle it basically since auth.users isn't easily joinable directly 
+    // Real implementation would join with users table for customer email,
+    // for now we just show user_id or handle it basically since auth.users isn't easily joinable directly
     // without a public profiles table. We will stick to the basic requirements.
     const { data } = await supabase
       .from('orders')
       .select('*')
       .order('created_at', { ascending: false });
-    
+
     if (data) setOrders(data);
     setLoading(false);
   };
@@ -25,11 +25,17 @@ export function AdminOrdersPage() {
   }, []);
 
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
+    if (newStatus === 'Cancelado' && !confirm('¿Cancelar este pedido? No se puede deshacer.')) return;
+    const previous = orders;
     // Optimistic update
     setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-    
-    // DB Update
-    await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
+
+    // DB Update (revert if it fails)
+    const { error } = await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
+    if (error) {
+      setOrders(previous);
+      alert('No se pudo actualizar el pedido: ' + error.message);
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -42,7 +48,7 @@ export function AdminOrdersPage() {
     }
   };
 
-  const formatPrice = (price: number) => 
+  const formatPrice = (price: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
 
   return (
@@ -91,7 +97,7 @@ export function AdminOrdersPage() {
                       {getStatusBadge(order.status)}
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <select 
+                      <select
                         value={order.status}
                         onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
                         className="text-xs border-gray-300 rounded-md focus:ring-belia-red focus:border-belia-red py-1 pl-2 pr-6"

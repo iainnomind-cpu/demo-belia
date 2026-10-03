@@ -13,7 +13,7 @@ export function AdminSuppliersPage() {
       .from('suppliers')
       .select('*')
       .order('created_at', { ascending: false });
-    
+
     if (data) setSuppliers(data);
     setLoading(false);
   };
@@ -23,13 +23,37 @@ export function AdminSuppliersPage() {
   }, []);
 
   const handleAction = async (id: string, action: 'approve' | 'reject') => {
+    const supplier = suppliers.find(s => s.id === id);
+    const question = action === 'approve'
+      ? `¿Aprobar a ${supplier?.company_name}? Se creará su cuenta de proveedor y se le enviará un correo con su contraseña.`
+      : `¿Rechazar la solicitud de ${supplier?.company_name}?`;
+    if (!confirm(question)) return;
+
     setProcessing(id);
     try {
-      // In a full implementation this would call the /approve-supplier Edge Function 
-      // which also creates the auth user. For this stub, we just update the status in the table.
+      if (action === 'approve') {
+        // Creates the auth user (role proveedor) and sends the welcome email
+        const { data, error } = await supabase.functions.invoke('approve-supplier', { body: { supplierId: id } });
+        if (error) {
+          const ctx = (error as { context?: Response }).context;
+          const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+          throw new Error(body?.error ?? error.message);
+        }
+        if (data?.emailSent === false) {
+          alert(`Proveedor aprobado, pero no se pudo enviar el correo.
+
+Comparte estos datos manualmente:
+Usuario: ${supplier?.email}
+Contraseña temporal: ${data.tempPassword}`);
+        }
+      } else {
+        const { error } = await (supabase.from('suppliers') as any).update({ status: 'rechazado' }).eq('id', id);
+        if (error) throw error;
+      }
       const newStatus = action === 'approve' ? 'aprobado' : 'rechazado';
-      await (supabase.from('suppliers') as any).update({ status: newStatus }).eq('id', id);
-      setSuppliers(suppliers.map(s => s.id === id ? { ...s, status: newStatus } : s));
+      setSuppliers(prev => prev.map(s => s.id === id ? { ...s, status: newStatus } : s));
+    } catch (err) {
+      alert('Error: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setProcessing(null);
     }
@@ -97,7 +121,7 @@ export function AdminSuppliersPage() {
                     <td className="px-6 py-4 text-right">
                       {supplier.status === 'pendiente' && (
                         <div className="flex items-center justify-end gap-2">
-                          <button 
+                          <button
                             onClick={() => handleAction(supplier.id, 'reject')}
                             disabled={processing === supplier.id}
                             className="p-2 text-error hover:bg-error/10 rounded transition-colors disabled:opacity-50"
@@ -105,7 +129,7 @@ export function AdminSuppliersPage() {
                           >
                             <span className="material-symbols-outlined text-[20px]">close</span>
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleAction(supplier.id, 'approve')}
                             disabled={processing === supplier.id}
                             className="p-2 text-success-green hover:bg-success-container rounded transition-colors disabled:opacity-50"

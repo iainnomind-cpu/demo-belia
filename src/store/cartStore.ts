@@ -1,5 +1,7 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { CartItem, Product } from '../types/database';
+import { getValidPromo } from '../lib/pricing';
 
 interface CartState {
   items: CartItem[];
@@ -18,7 +20,7 @@ interface CartState {
  * Per FR-008, actual persistence happens in DB (cart_items table).
  * This store handles the local representation before/during sync.
  */
-export const useCartStore = create<CartState>((set) => ({
+export const useCartStore = create<CartState>()(persist((set) => ({
   items: [],
   isCartOpen: false,
   checkoutSuccess: false,
@@ -42,7 +44,7 @@ export const useCartStore = create<CartState>((set) => ({
       name: product.name,
       brand: product.brand,
       price_publico: product.price_publico,
-      price_promo: product.price_promo,
+      price_promo: getValidPromo(product.price_publico, product.price_promo),
       price_proveedor: supplierPrice, // Only populated for proveedores via RPC
       image_url: product.image_url,
       quantity: Math.min(quantity, product.stock),
@@ -73,4 +75,8 @@ export const useCartStore = create<CartState>((set) => ({
   clearCart: () => set({ items: [] }),
   setIsCartOpen: (isOpen) => set({ isCartOpen: isOpen }),
   setCheckoutSuccess: (status) => set({ checkoutSuccess: status })
+}), {
+  // Keep the cart across page reloads (only the items, not UI state)
+  name: 'belia-cart',
+  partialize: (state) => ({ items: state.items }),
 }));

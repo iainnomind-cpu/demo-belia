@@ -102,47 +102,57 @@ async function handleRequest(req: Request): Promise<Response> {
       throw new Error(`Failed to update supplier status: ${updateErr.message}`);
     }
 
-    // 6. Send Email via SMTP
-    const client = new SmtpClient();
-    
-    await client.connectTLS({
-      hostname: "smtp.gmail.com",
-      port: 465,
-      username: GMAIL_USER,
-      password: GMAIL_APP_PASSWORD,
-    });
+    // 6. Send Email via SMTP. The account already exists at this point, so an
+    // email failure must not look like a failed approval: the admin gets the
+    // temporary password back to share it manually.
+    const loginUrl = `${req.headers.get('origin') ?? 'https://demo-belia.vercel.app'}/login`;
+    try {
+      const client = new SmtpClient();
 
-    await client.send({
-      from: `"Belia Premium Beauty" <${GMAIL_USER}>`,
-      to: supplier.email,
-      subject: "¡Bienvenido a la red de proveedores Belia!",
-      content: "auto-generated",
-      html: `
-        <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto;">
-          <h1 style="color: #BA000D;">¡Hola ${supplier.contact_name}!</h1>
-          <p>Nos complace informarte que tu solicitud para formar parte de la red de proveedores B2B de Belia ha sido <strong>aprobada</strong>.</p>
-          <p>A partir de ahora, al iniciar sesión en nuestra plataforma, podrás ver y acceder a los precios preferenciales y promociones exclusivas para mayoristas.</p>
-          
-          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-            <h3 style="margin-top: 0;">Tus credenciales de acceso:</h3>
-            <p><strong>Usuario:</strong> ${supplier.email}</p>
-            <p><strong>Contraseña temporal:</strong> ${tempPassword}</p>
-            <p style="font-size: 12px; color: #666;">Te recomendamos cambiar esta contraseña al ingresar por primera vez.</p>
+      await client.connectTLS({
+        hostname: "smtp.gmail.com",
+        port: 465,
+        username: GMAIL_USER,
+        password: GMAIL_APP_PASSWORD,
+      });
+
+      await client.send({
+        from: `"Belia Premium Beauty" <${GMAIL_USER}>`,
+        to: supplier.email,
+        subject: "¡Bienvenido a la red de proveedores Belia!",
+        content: "auto-generated",
+        html: `
+          <div style="font-family: Arial, sans-serif; max-w: 600px; margin: 0 auto;">
+            <h1 style="color: #BA000D;">¡Hola ${supplier.contact_name}!</h1>
+            <p>Nos complace informarte que tu solicitud para formar parte de la red de proveedores B2B de Belia ha sido <strong>aprobada</strong>.</p>
+            <p>A partir de ahora, al iniciar sesión en nuestra plataforma, podrás ver y acceder a los precios preferenciales y promociones exclusivas para mayoristas.</p>
+
+            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <h3 style="margin-top: 0;">Tus credenciales de acceso:</h3>
+              <p><strong>Usuario:</strong> ${supplier.email}</p>
+              <p><strong>Contraseña temporal:</strong> ${tempPassword}</p>
+              <p style="font-size: 12px; color: #666;">Te recomendamos cambiar esta contraseña al ingresar por primera vez.</p>
+            </div>
+
+            <a href="${loginUrl}" style="display: inline-block; background-color: #BA000D; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Iniciar Sesión</a>
+
+            <p style="margin-top: 30px; font-size: 14px; color: #666;">
+              Si tienes alguna duda, no dudes en responder a este correo.<br>
+              El equipo de Belia.
+            </p>
           </div>
-          
-          <a href="https://belia-app.netlify.app/login" style="display: inline-block; background-color: #BA000D; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Iniciar Sesión</a>
-          
-          <p style="margin-top: 30px; font-size: 14px; color: #666;">
-            Si tienes alguna duda, no dudes en responder a este correo.<br>
-            El equipo de Belia.
-          </p>
-        </div>
-      `,
-    });
+        `,
+      });
 
-    await client.close();
+      await client.close();
+    } catch (mailErr) {
+      console.error('Welcome email failed:', mailErr);
+      return new Response(JSON.stringify({ success: true, emailSent: false, tempPassword }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, emailSent: true }), {
       headers: { 'Content-Type': 'application/json' },
     });
 

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCartStore } from '../../store/cartStore';
 import type { Product } from '../../types/database';
+import { getValidPromo } from '../../lib/pricing';
 
 interface ProductCardProps {
   product: Product;
@@ -28,14 +29,15 @@ export function ProductCard({ product, supplierPrice }: ProductCardProps) {
   // Pricing logic
   let displayPrice = product.price_publico;
   let originalPrice: number | null = null;
-  const hasDiscount = !!originalPrice;
+  const promo = getValidPromo(product.price_publico, product.price_promo);
 
   if (supplierPrice) {
     displayPrice = supplierPrice;
-  } else if (product.price_promo) {
-    displayPrice = product.price_promo;
+  } else if (promo) {
+    displayPrice = promo;
     originalPrice = product.price_publico;
   }
+  const hasDiscount = !!originalPrice;
 
   const discountPct =
     originalPrice && originalPrice > 0

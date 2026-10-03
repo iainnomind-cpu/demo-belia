@@ -2,11 +2,17 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Product } from '../../types/database';
 
-export function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+const PAGE_SIZE = 50;
+type AdminProduct = Product & { price_proveedor: number | null };
 
-  const [categories, setCategories] = useState<{id: string, name: string}[]>([]);
+export function AdminProductsPage() {
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  const [categories, setCategories] = useState<{id: string, name: string, parent_id: string | null}[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [newProduct, setNewProduct] = useState({
     name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: ''
@@ -14,30 +20,51 @@ export function AdminProductsPage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // price_proveedor is not readable through the public API; admin_get_products()
+  // is an admin-only RPC. Paginated: the API returns at most 1000 rows per request.
   const fetchProducts = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (data) setProducts(data);
+    let query = (supabase.rpc as any)('admin_get_products', {}, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    const term = search.replace(/[,()*%\\]/g, ' ').trim();
+    if (term) {
+      query = query.or(`name.ilike.%${term}%,sku.ilike.%${term}%,brand.ilike.%${term}%`);
+    }
+    const { data, count, error } = await query;
+    if (error) {
+      alert('Error cargando productos: ' + error.message);
+    } else {
+      setProducts(data ?? []);
+      setTotal(count ?? 0);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
-    void fetchProducts();
+    const t = setTimeout(() => void fetchProducts(), 300); // debounce typing
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, search]);
+
+  useEffect(() => {
     const fetchCats = async () => {
-      const { data } = await supabase.from('categories').select('id, name');
+      const { data } = await supabase.from('categories').select('id, name, parent_id').order('name');
       if (data) setCategories(data);
     };
     void fetchCats();
   }, []);
 
+  const categoryLabel = (c: { name: string, parent_id: string | null }) => {
+    const parent = c.parent_id ? categories.find(p => p.id === c.parent_id) : null;
+    return parent ? `${parent.name} › ${c.name}` : c.name;
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    
+
     let finalImageUrl = newProduct.image_url;
 
     // Upload image if selected
@@ -49,20 +76,20 @@ export function AdminProductsPage() {
       const { error: uploadError } = await supabase.storage
         .from('products')
         .upload(filePath, imageFile);
-        
+
       if (uploadError) {
         alert('Error subiendo imagen: ' + uploadError.message + '\n\nAsegúrate de haber creado un bucket llamado "products" en Supabase Storage y que sea Público.');
         setSaving(false);
         return;
       }
-      
+
       const { data: publicUrlData } = supabase.storage
         .from('products')
         .getPublicUrl(filePath);
-        
+
       finalImageUrl = publicUrlData.publicUrl;
     }
-    
+
     const payload = {
       name: newProduct.name,
       sku: newProduct.sku,
@@ -75,7 +102,7 @@ export function AdminProductsPage() {
     };
 
     const { error } = await (supabase.from('products') as any).insert([payload]);
-    
+
     if (!error) {
       setShowModal(false);
       setNewProduct({ name: '', sku: '', brand: '', price_publico: '', stock: '', category_id: '', image_url: '' });
@@ -87,18 +114,22 @@ export function AdminProductsPage() {
     setSaving(false);
   };
 
-  const toggleActive = async (id: string, current: boolean) => {
-    const updated = !current;
-    setProducts(products.map(p => p.id === id ? { ...p, is_active: updated } : p));
-    await (supabase.from('products') as any).update({ is_active: updated }).eq('id', id);
+  const updateProduct = async (id: string, changes: Partial<AdminProduct>) => {
+    const previous = products;
+    setProducts(products.map(p => p.id === id ? { ...p, ...changes } : p));
+    const { error } = await (supabase.from('products') as any).update(changes).eq('id', id);
+    if (error) {
+      setProducts(previous);
+      alert('No se pudo guardar el cambio: ' + error.message);
+    }
   };
 
-  const updateFeatured = async (id: string, label: string | null) => {
-    setProducts(products.map(p => p.id === id ? { ...p, featured_label: label } : p));
-    await (supabase.from('products') as any).update({ featured_label: label }).eq('id', id);
-  };
+  const toggleActive = (id: string, current: boolean) => updateProduct(id, { is_active: !current });
+  const updateFeatured = (id: string, label: string | null) => updateProduct(id, { featured_label: label });
 
-  const formatPrice = (price: number) => 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  const formatPrice = (price: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
 
   return (
@@ -109,7 +140,7 @@ export function AdminProductsPage() {
           <button onClick={fetchProducts} className="p-2 bg-surface-container rounded-lg hover:bg-gray-200 transition-colors" title="Actualizar">
             <span className="material-symbols-outlined text-text-secondary">refresh</span>
           </button>
-          <button 
+          <button
             onClick={() => setShowModal(true)}
             className="flex items-center gap-2 bg-belia-red text-white px-4 py-2 rounded-lg font-bold hover:bg-belia-red-deep transition-colors"
           >
@@ -128,7 +159,7 @@ export function AdminProductsPage() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            
+
             <form onSubmit={handleCreate} className="p-6 overflow-y-auto space-y-4">
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1">Nombre del Producto *</label>
@@ -158,14 +189,14 @@ export function AdminProductsPage() {
                 <label className="block text-xs font-medium text-text-secondary mb-1">Categoría</label>
                 <select value={newProduct.category_id} onChange={e => setNewProduct({...newProduct, category_id: e.target.value})} className="w-full border-gray-300 rounded-lg text-sm">
                   <option value="">Seleccione una categoría</option>
-                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  {[...categories].sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b))).map(c => <option key={c.id} value={c.id}>{categoryLabel(c)}</option>)}
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1">Imagen del Producto</label>
                 <div className="flex gap-2">
-                  <input 
-                    type="file" 
+                  <input
+                    type="file"
                     accept="image/*"
                     onChange={e => setImageFile(e.target.files ? e.target.files[0] : null)}
                     className="flex-1 border border-gray-300 rounded-lg text-sm p-1.5 file:mr-4 file:py-1 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-belia-red/10 file:text-belia-red hover:file:bg-belia-red/20"
@@ -174,7 +205,7 @@ export function AdminProductsPage() {
                   <input type="url" placeholder="URL web (opcional)" value={newProduct.image_url} onChange={e => setNewProduct({...newProduct, image_url: e.target.value})} className="flex-1 border-gray-300 rounded-lg text-sm" disabled={!!imageFile} />
                 </div>
               </div>
-              
+
               <div className="pt-4 flex justify-end gap-3 border-t border-divider mt-6">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">Cancelar</button>
                 <button type="submit" disabled={saving} className="px-6 py-2 bg-belia-red text-white text-sm font-bold rounded-lg hover:bg-belia-red-deep disabled:opacity-50">
@@ -185,6 +216,22 @@ export function AdminProductsPage() {
           </div>
         </div>
       )}
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between mb-4">
+        <input
+          type="search"
+          value={search}
+          onChange={e => { setSearch(e.target.value); setPage(0); }}
+          placeholder="Buscar por nombre, SKU o marca…"
+          className="w-full sm:max-w-sm border-gray-300 rounded-lg text-sm"
+        />
+        <div className="flex items-center gap-2 text-sm text-text-secondary">
+          <span>{total.toLocaleString('es-MX')} productos</span>
+          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0 || loading} className="px-3 py-1 rounded border border-divider disabled:opacity-40">‹</button>
+          <span>{page + 1} / {totalPages}</span>
+          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1 || loading} className="px-3 py-1 rounded border border-divider disabled:opacity-40">›</button>
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-divider overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
@@ -209,7 +256,7 @@ export function AdminProductsPage() {
                   <tr key={product.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <img src={product.image_url || ''} alt="" className="w-10 h-10 rounded bg-surface-dim object-contain border border-divider" />
+                        <img src={product.image_url || 'https://placehold.co/80x80?text=%20'} alt="" className="w-10 h-10 rounded bg-surface-dim object-contain border border-divider" />
                         <span className="font-medium text-text-primary line-clamp-2 max-w-[200px]">{product.name}</span>
                       </div>
                     </td>
@@ -219,8 +266,8 @@ export function AdminProductsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-text-primary">{formatPrice(product.price_publico)} <span className="text-xs font-normal text-text-meta">Púb</span></div>
-                      {(product as any).price_proveedor && (
-                        <div className="text-success-green font-medium mt-1 text-xs">{formatPrice((product as any).price_proveedor)} <span className="text-text-meta">B2B</span></div>
+                      {product.price_proveedor && (
+                        <div className="text-success-green font-medium mt-1 text-xs">{formatPrice(product.price_proveedor)} <span className="text-text-meta">B2B</span></div>
                       )}
                     </td>
                     <td className="px-6 py-4">
@@ -230,7 +277,7 @@ export function AdminProductsPage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 mb-2">
-                        <button 
+                        <button
                           onClick={() => toggleActive(product.id, product.is_active)}
                           className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${product.is_active ? 'bg-success-green' : 'bg-gray-300'}`}
                         >
@@ -243,7 +290,7 @@ export function AdminProductsPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      <select 
+                      <select
                         value={product.featured_label || ''}
                         onChange={(e) => updateFeatured(product.id, e.target.value || null)}
                         className="text-xs border-gray-300 rounded-md focus:ring-belia-red focus:border-belia-red py-1"

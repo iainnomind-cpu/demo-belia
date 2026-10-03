@@ -155,29 +155,34 @@ function ProductSkeleton() {
 export function HomePage() {
   const { user } = useAuth();
   const { products, loading } = useProducts();
+  // Featured products come from their own query: filtering the first page of
+  // 24 products would almost never contain the ones labelled in the admin.
+  const { products: featuredProducts, loading: loadingFeatured } = useProducts({ featuredOnly: true });
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   const [loadingSupplier, setLoadingSupplier] = useState(false);
 
+  const visibleIds = [...products.slice(0, 8), ...featuredProducts.slice(0, 8)].map(p => p.id).join(',');
+
   useEffect(() => {
-    if (user?.role === 'proveedor' || user?.role === 'admin') {
+    if ((user?.role === 'proveedor' || user?.role === 'admin') && visibleIds) {
       const fetchSupplierPrices = async () => {
         setLoadingSupplier(true);
-        const { data } = await supabase.rpc('get_supplier_products');
+        const { data } = await supabase.rpc('get_supplier_products').in('id', visibleIds.split(','));
         if (data) setSupplierProducts(data);
         setLoadingSupplier(false);
       };
       void fetchSupplierPrices();
     }
-  }, [user]);
+  }, [user, visibleIds]);
 
-  const displayProducts = products.map(p => {
+  const withSupplierPrice = <T extends { id: string }>(list: T[]) => list.map(p => {
     const sp = supplierProducts.find(s => s.id === p.id);
     return { ...p, supplierPrice: sp?.price_proveedor };
   });
 
-  const featured    = displayProducts.filter(p => p.featured_label).slice(0, 8);
-  const newArrivals = displayProducts.slice(0, 8);
-  const isLoading   = loading || loadingSupplier;
+  const featured    = withSupplierPrice(featuredProducts.slice(0, 8));
+  const newArrivals = withSupplierPrice(products.slice(0, 8));
+  const isLoading   = loading || loadingFeatured || loadingSupplier;
 
   return (
     <div className="flex flex-col bg-belia-cream">
