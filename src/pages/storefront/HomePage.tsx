@@ -6,6 +6,19 @@ import { ProductCard } from '../../components/catalog/ProductCard';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import type { SupplierProduct } from '../../types/database';
+import { useSiteContent, type HeroContent, type CarouselContent } from '../../hooks/useSiteContent';
+import { PromoCarousel } from '../../components/home/PromoCarousel';
+import { SmartLink } from '../../components/home/SmartLink';
+
+/* ─── Hero defaults (used when a field is empty in /admin/content) ─ */
+const HERO_DEFAULTS: Required<HeroContent> = {
+  badge: 'Calidad Profesional para Todos',
+  title: 'Tu belleza al máximo nivel',
+  subtitle: 'Descubre el catálogo definitivo de belleza. Ya seas un apasionado del cuidado personal o un experto en el salón, tenemos las mejores marcas premium para ti.',
+  cta_text: 'Ver todos los productos',
+  cta_url: '/categoria/todos',
+  image_url: 'https://images.unsplash.com/photo-1571875257727-256c39da42af?auto=format&fit=crop&w=1600&q=85',
+};
 
 /* ─── Animation variants ──────────────────────────────────────── */
 const containerVariants: Variants = {
@@ -154,6 +167,21 @@ function ProductSkeleton() {
 ═══════════════════════════════════════════════════════════════════ */
 export function HomePage() {
   const { user } = useAuth();
+  const { content: heroContent } = useSiteContent<HeroContent>('home_banner_main');
+  const { content: carousel } = useSiteContent<CarouselContent>('home_carousel');
+  const pick = (key: keyof HeroContent) => heroContent?.[key]?.trim() || HERO_DEFAULTS[key];
+  const hero = {
+    badge: pick('badge'),
+    title: pick('title'),
+    subtitle: pick('subtitle'),
+    cta_text: pick('cta_text'),
+    cta_url: pick('cta_url'),
+    image_url: pick('image_url'),
+  };
+  // The last word of the headline keeps the brand gradient
+  const titleWords = hero.title.split(' ');
+  const titleLast = titleWords.pop();
+  const titleStart = titleWords.join(' ');
   const { products, loading } = useProducts();
   // Featured products come from their own query: filtering the first page of
   // 24 products would almost never contain the ones labelled in the admin.
@@ -195,8 +223,8 @@ export function HomePage() {
         {/* ── BACKGROUND SPLIT & ANTIGRAVITY EFFECTS ──────────── */}
         <div className="absolute right-0 top-0 bottom-0 w-full lg:w-[55%] z-0">
           <img
-            src="https://images.unsplash.com/photo-1571875257727-256c39da42af?auto=format&fit=crop&w=1600&q=85"
-            alt="🌸 100% Productos Originales · Profesionales de la belleza"
+            src={hero.image_url}
+            alt={hero.title}
             className="w-full h-full object-cover scale-[1.02]"
             fetchPriority="high"
           />
@@ -229,7 +257,7 @@ export function HomePage() {
                 className="inline-flex items-center gap-2 rounded-full bg-belia-blush px-4 py-1.5 text-sm font-bold text-belia-red ring-1 ring-inset ring-belia-red/20 mb-8"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-belia-red animate-pulse"></span>
-                Calidad Profesional para Todos
+                {hero.badge}
               </motion.div>
 
               {/* Headline: Value Proposition */}
@@ -240,9 +268,9 @@ export function HomePage() {
                 className="text-4xl sm:text-5xl lg:text-[4rem] font-extrabold tracking-tight text-belia-charcoal leading-[1.05] mb-6"
                 style={{ transform: 'translateZ(20px)' }}
               >
-                Tu belleza al máximo{' '}
+                {titleStart}{titleStart && ' '}
                 <span className="bg-gradient-to-r from-belia-red to-[#FF8FA3] bg-clip-text text-transparent">
-                  nivel
+                  {titleLast}
                 </span>
               </motion.h1>
 
@@ -253,7 +281,7 @@ export function HomePage() {
                 transition={{ delay: 0.5, duration: 0.6 }}
                 className="text-lg sm:text-xl text-text-secondary max-w-lg leading-relaxed mb-10"
               >
-                Descubre el catálogo definitivo de belleza. Ya seas un apasionado del cuidado personal o un experto en el salón, tenemos las mejores marcas premium para ti.
+                {hero.subtitle}
               </motion.p>
 
               {/* CTAs */}
@@ -263,15 +291,15 @@ export function HomePage() {
                 transition={{ delay: 0.6, duration: 0.6 }}
                 className="flex flex-col sm:flex-row items-center gap-4 w-full sm:w-auto mb-12"
               >
-                <Link 
-                  to="/categoria/todos" 
+                <SmartLink
+                  to={hero.cta_url}
                   className="w-full sm:w-auto inline-flex items-center justify-center bg-belia-red text-white px-6 py-3 rounded-xl font-bold text-base hover:bg-[#D9302A] shadow-belia-lg hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
                 >
-                  Ver todos los productos
-                </Link>
+                  {hero.cta_text}
+                </SmartLink>
                 {!user && (
-                  <Link 
-                    to="/proveedores" 
+                  <Link
+                    to="/proveedores"
                     className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-belia-charcoal px-6 py-3 rounded-xl font-bold text-base border border-divider hover:bg-surface-container transition-colors"
                   >
                     ¿Eres profesional?
@@ -333,12 +361,12 @@ export function HomePage() {
 
             {/* ── VISUAL (Right Side - Antigravity Glassmorphism) ──────────────────────────── */}
             <div className="hidden lg:block relative h-[600px] w-full pointer-events-none" style={{ transformStyle: 'preserve-3d' }}>
-              
+
               {/* Primary Glass Panel integrated with the Logo */}
               <motion.div
                 initial={{ opacity: 0, x: 50, rotateY: -15, rotateX: 10 }}
                 animate={{ opacity: 1, x: 0, rotateY: -5, rotateX: 5, y: [-10, 10, -10] }}
-                transition={{ 
+                transition={{
                   opacity: { duration: 1 },
                   x: { duration: 1, ease: "easeOut" },
                   rotateY: { duration: 1, ease: "easeOut" },
@@ -400,6 +428,11 @@ export function HomePage() {
           </motion.div>
         </div>
       </AnimatedSection>
+
+      {/* ══════════════════════════════════════════════════════════
+          PROMOCIONES — carrusel editable en /admin/content
+      ══════════════════════════════════════════════════════════ */}
+      {carousel?.slides && carousel.slides.length > 0 && <PromoCarousel slides={carousel.slides} />}
 
       {/* ══════════════════════════════════════════════════════════
           FEATURED / MÁS VENDIDOS — Selección editorial
