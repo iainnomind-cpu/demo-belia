@@ -21,12 +21,12 @@ export function AdminCustomersPage() {
       // 1. Fetch VIP threshold from site_content
       const contentData = (await supabase
         .from('site_content')
-        .select('content')
+        .select('content_data')
         .eq('id', 'vip_threshold')
-        .single()).data as any;
+        .maybeSingle()).data as any;
         
-      if (contentData?.content?.value) {
-        setVipThreshold(Number(contentData.content.value));
+      if (contentData?.content_data?.value) {
+        setVipThreshold(Number(contentData.content_data.value));
       }
 
       // 2. Fetch all completed/delivered orders to aggregate LTV

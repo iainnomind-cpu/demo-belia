@@ -8,38 +8,97 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const GOOGLE_SHEETS_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY')!;
-const GOOGLE_SHEET_ID = Deno.env.get('GOOGLE_SHEET_ID')!;
+const GOOGLE_SHEETS_API_KEY = Deno.env.get('GOOGLE_SHEETS_API_KEY');
+const GOOGLE_SHEET_ID = Deno.env.get('GOOGLE_SHEET_ID');
+const GOOGLE_SHEET_TAB = Deno.env.get('GOOGLE_SHEET_TAB') ?? 'PLANTILLA BELIA';
 
-// Columns from PLANTILLA BELIA (A–I confirmed)
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+
+// Columns from PLANTILLA BELIA:
+// A Código | B Título | C Descripción | D Stock | E Precio | F Promoción
+// G Marca | H Categoría | I Subcategoría | J-L URL_Imagen_01..03
+const COL = {
+  sku: 0, name: 1, description: 2, stock: 3, price: 4, promo: 5,
+  brand: 6, category: 7, subcategory: 8, img1: 9, img2: 10, img3: 11,
+} as const;
+
 interface SheetRow {
   sku: string;
   name: string;
-  brand: string;
-  category_name: string;
+  description: string | null;
+  brand: string | null;
+  category_id: string | null;
   price_publico: number;
   price_promo: number | null;
-  descuento_proveedor_pct: number | null; // Column H: % discount for supplier price
   stock: number;
-  featured_label: string | null; // Column I: e.g. "TOP 1", "TOP 2"
+  image_url: string | null;
 }
 
-interface SyncDiff {
-  toInsert: SheetRow[];
-  toUpdate: Array<{ id: string; changes: Partial<SheetRow> }>;
-  toDeactivate: string[]; // IDs of products to set active=false
-  skuConflicts: string[]; // Duplicate SKUs in sheet
+type ExistingProduct = SheetRow & { id: string; is_active: boolean; source: string };
+
+const SHEET_FIELDS = [
+  'name', 'description', 'brand', 'category_id', 'price_publico', 'price_promo', 'stock', 'image_url',
+] as const;
+
+// "$ 1,234.50" → 1234.5 ; "" / "#N/D" → null
+function parseMoney(value: string | undefined): number | null {
+  if (!value) return null;
+  const cleaned = value.replace(/[^0-9.-]/g, '');
+  if (!cleaned) return null;
+  const n = parseFloat(cleaned);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
+}
+
+// Treat spreadsheet error values (#N/D, #N/A, #REF!...) as empty
+function cleanText(value: string | undefined): string | null {
+  const v = value?.trim();
+  if (!v || v.startsWith('#')) return null;
+  return v;
+}
+
+// Dropbox share links (dl=0) return an HTML page; raw=1 serves the image itself
+function normalizeImageUrl(value: string | undefined): string | null {
+  const v = cleanText(value);
+  if (!v) return null;
+  try {
+    const url = new URL(v);
+    if (url.hostname.endsWith('dropbox.com')) {
+      url.searchParams.delete('dl');
+      url.searchParams.set('raw', '1');
+    }
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+// "DEPILACIÓN" → "depilacion"
+function normalizeName(value: string): string {
+  return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 serve(async (req) => {
-  // Only POST from authenticated admin
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+    return json({ error: 'Method not allowed' }, 405);
   }
 
   const authHeader = req.headers.get('Authorization');
   if (!authHeader) {
-    return new Response('Unauthorized', { status: 401 });
+    return json({ error: 'Unauthorized' }, 401);
   }
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
@@ -50,57 +109,101 @@ serve(async (req) => {
   );
 
   if (authError || !user || user.user_metadata?.role !== 'admin') {
-    return new Response('Forbidden: admin role required', { status: 403 });
+    return json({ error: 'Forbidden: admin role required' }, 403);
   }
 
-  const body = await req.json() as { confirmed?: boolean };
+  if (!GOOGLE_SHEETS_API_KEY || !GOOGLE_SHEET_ID) {
+    return json({ error: 'Faltan los secrets GOOGLE_SHEETS_API_KEY / GOOGLE_SHEET_ID en Supabase.' }, 500);
+  }
+
+  const body = await req.json().catch(() => ({})) as { confirmed?: boolean };
   const isConfirmed = body.confirmed === true;
 
-  // Create sync log entry
-  const { data: syncLog } = await supabase
-    .from('sync_logs')
-    .insert({ status: 'en_progreso' })
-    .select()
-    .single();
-
-  const logId = syncLog?.id;
+  // Only real syncs are logged; previews don't leave 'en_progreso' entries behind
+  let logId: string | undefined;
+  if (isConfirmed) {
+    const { data: syncLog } = await supabase
+      .from('sync_logs')
+      .insert({ status: 'en_progreso' })
+      .select()
+      .single();
+    logId = syncLog?.id;
+  }
 
   try {
     // ── 1. Fetch sheet data ──────────────────────────────────
-    const sheetUrl = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/PLANTILLA BELIA!A2:I?key=${GOOGLE_SHEETS_API_KEY}`;
+    const range = encodeURIComponent(`'${GOOGLE_SHEET_TAB}'!A2:L`);
+    const sheetUrl = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
     const sheetRes = await fetch(sheetUrl);
 
     if (!sheetRes.ok) {
-      throw new Error(`Google Sheets API error: ${sheetRes.status} ${sheetRes.statusText}`);
+      const detail = await sheetRes.json().catch(() => null) as { error?: { message?: string } } | null;
+      throw new Error(`Google Sheets API error ${sheetRes.status}: ${detail?.error?.message ?? sheetRes.statusText}`);
     }
 
     const sheetData = await sheetRes.json() as { values?: string[][] };
     const rows = sheetData.values ?? [];
 
-    // ── 2. Parse rows, detect duplicate SKUs ─────────────────
+    // ── 2. Load categories to map "Categoría / Subcategoría" → category_id
+    const { data: categories, error: catError } = await supabase
+      .from('categories')
+      .select('id, name, parent_id');
+    if (catError) throw new Error(`Categories fetch failed: ${catError.message}`);
+
+    const parentByName = new Map<string, string>();
+    const childByKey = new Map<string, string>(); // `${parentId}|${childName}`
+    for (const c of categories ?? []) {
+      if (!c.parent_id) parentByName.set(normalizeName(c.name), c.id);
+      else childByKey.set(`${c.parent_id}|${normalizeName(c.name)}`, c.id);
+    }
+
+    const unmatchedCategories = new Set<string>();
+    const resolveCategory = (cat: string | null, sub: string | null): string | null => {
+      if (!cat) return null;
+      const parentId = parentByName.get(normalizeName(cat));
+      if (!parentId) {
+        unmatchedCategories.add(sub ? `${cat} / ${sub}` : cat);
+        return null;
+      }
+      if (sub) {
+        const childId = childByKey.get(`${parentId}|${normalizeName(sub)}`);
+        if (childId) return childId;
+        unmatchedCategories.add(`${cat} / ${sub}`);
+      }
+      return parentId;
+    };
+
+    // ── 3. Parse rows, detect duplicate SKUs ─────────────────
     const skuCounts: Record<string, number> = {};
     const parsedRows: SheetRow[] = [];
+    const invalidRows: string[] = [];
 
     for (const row of rows) {
-      const sku = row[0]?.trim();
+      const sku = row[COL.sku]?.trim();
       if (!sku) continue;
 
       skuCounts[sku] = (skuCounts[sku] ?? 0) + 1;
       if (skuCounts[sku] > 1) continue; // Skip duplicates (take first occurrence)
 
-      const pricePublico = parseFloat(row[4]) || 0;
-      const desctoPct = row[6] ? parseFloat(row[6]) : null;
+      const name = cleanText(row[COL.name]);
+      const pricePublico = parseMoney(row[COL.price]);
+      if (!name || pricePublico === null) {
+        invalidRows.push(sku);
+        continue;
+      }
+
+      const images = [row[COL.img1], row[COL.img2], row[COL.img3]].map(normalizeImageUrl);
 
       parsedRows.push({
         sku,
-        name: row[1]?.trim() ?? '',
-        brand: row[2]?.trim() ?? '',
-        category_name: row[3]?.trim() ?? '',
+        name,
+        description: cleanText(row[COL.description]),
+        brand: cleanText(row[COL.brand]),
+        category_id: resolveCategory(cleanText(row[COL.category]), cleanText(row[COL.subcategory])),
         price_publico: pricePublico,
-        price_promo: row[5] ? parseFloat(row[5]) : null,
-        descuento_proveedor_pct: desctoPct,
-        stock: parseInt(row[7] ?? '0', 10) || 0,
-        featured_label: row[8]?.trim() || null,
+        price_promo: parseMoney(row[COL.promo]),
+        stock: Math.max(0, parseInt((row[COL.stock] ?? '').replace(/[^0-9-]/g, ''), 10) || 0),
+        image_url: images.find((u) => u !== null) ?? null,
       });
     }
 
@@ -108,138 +211,112 @@ serve(async (req) => {
       .filter(([, count]) => count > 1)
       .map(([sku]) => sku);
 
-    // ── 3. Load existing products (source='sheet' only) ───────
-    const { data: existingProducts } = await supabase
-      .from('products')
-      .select('id, sku, name, brand, price_publico, price_promo, price_proveedor, stock, featured_label, is_active, source')
-      .eq('source', 'sheet'); // Never touch source='manual'
+    // ── 4. Load ALL existing products (paginated: PostgREST caps at 1000 rows)
+    const existingProducts: ExistingProduct[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, sku, name, description, brand, category_id, price_publico, price_promo, stock, image_url, is_active, source')
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`Products fetch failed: ${error.message}`);
+      existingProducts.push(...(data as ExistingProduct[]));
+      if (!data || data.length < PAGE) break;
+    }
 
-    const existingBySku = new Map(
-      (existingProducts ?? []).map((p) => [p.sku, p])
-    );
+    const existingBySku = new Map(existingProducts.map((p) => [p.sku, p]));
     const sheetSkus = new Set(parsedRows.map((r) => r.sku));
 
-    // ── 4. Build diff ─────────────────────────────────────────
-    const diff: SyncDiff = {
-      toInsert: [],
-      toUpdate: [],
-      toDeactivate: [],
-      skuConflicts,
-    };
+    // ── 5. Build diff ─────────────────────────────────────────
+    const toInsert: SheetRow[] = [];
+    const toUpdate: SheetRow[] = [];
+    const manualSkipped: string[] = [];
 
     for (const row of parsedRows) {
       const existing = existingBySku.get(row.sku);
-      const priceProveedor = row.descuento_proveedor_pct !== null
-        ? row.price_publico * (1 - row.descuento_proveedor_pct / 100)
-        : null;
-
       if (!existing) {
-        diff.toInsert.push({ ...row });
-      } else {
-        const changes: Record<string, unknown> = {};
-        if (existing.name !== row.name) changes['name'] = row.name;
-        if (existing.brand !== row.brand) changes['brand'] = row.brand;
-        if (existing.price_publico !== row.price_publico) changes['price_publico'] = row.price_publico;
-        if (existing.price_promo !== row.price_promo) changes['price_promo'] = row.price_promo;
-        if (existing.price_proveedor !== priceProveedor) changes['price_proveedor'] = priceProveedor;
-        if (existing.stock !== row.stock) changes['stock'] = row.stock;
-        if (existing.featured_label !== row.featured_label) changes['featured_label'] = row.featured_label;
-        if (!existing.is_active) changes['is_active'] = true; // Reactivate if back in sheet
-
-        if (Object.keys(changes).length > 0) {
-          diff.toUpdate.push({ id: existing.id, changes });
-        }
+        toInsert.push(row);
+        continue;
       }
+      if (existing.source === 'manual') {
+        manualSkipped.push(row.sku); // Never touch source='manual'
+        continue;
+      }
+      const changed = !existing.is_active || SHEET_FIELDS.some((f) => {
+        const a = existing[f] ?? null;
+        const b = row[f] ?? null;
+        // NUMERIC columns may come back as strings
+        if (typeof b === 'number' && a !== null) return Number(a) !== b;
+        return a !== b;
+      });
+      if (changed) toUpdate.push(row);
     }
 
     // Products in DB (source=sheet) but not in sheet anymore → deactivate
-    for (const existing of existingProducts ?? []) {
-      if (!sheetSkus.has(existing.sku) && existing.is_active) {
-        diff.toDeactivate.push(existing.id);
-      }
-    }
+    const toDeactivate = existingProducts
+      .filter((p) => p.source === 'sheet' && p.is_active && !sheetSkus.has(p.sku))
+      .map((p) => p.id);
 
-    // ── 5. Preview mode: return diff without applying ─────────
+    const warnings = {
+      skuConflicts,
+      invalidRows, // SKUs without name or price
+      unmatchedCategories: [...unmatchedCategories],
+      manualSkipped,
+    };
+
+    // ── 6. Preview mode: return diff without applying ─────────
     if (!isConfirmed) {
-      return new Response(JSON.stringify({
+      return json({
         preview: true,
-        toInsert: diff.toInsert.length,
-        toUpdate: diff.toUpdate.length,
-        toDeactivate: diff.toDeactivate.length,
-        skuConflicts: diff.skuConflicts,
-        details: diff,
-      }), {
-        headers: { 'Content-Type': 'application/json' },
+        totalRows: parsedRows.length,
+        toInsert: toInsert.length,
+        toUpdate: toUpdate.length,
+        toDeactivate: toDeactivate.length,
+        ...warnings,
+        sample: toInsert.slice(0, 5),
       });
     }
 
-    // ── 6. Apply diff (atomic, no partial commits) ─────────────
-    let insertedCount = 0;
-    let updatedCount = 0;
-    let deactivatedCount = 0;
-
-    // Inserts
-    if (diff.toInsert.length > 0) {
-      const insertPayload = diff.toInsert.map((row) => ({
-        sku: row.sku,
-        name: row.name,
-        brand: row.brand,
-        price_publico: row.price_publico,
-        price_promo: row.price_promo,
-        price_proveedor: row.descuento_proveedor_pct !== null
-          ? row.price_publico * (1 - row.descuento_proveedor_pct / 100)
-          : null,
-        stock: row.stock,
-        featured_label: row.featured_label,
-        is_active: true,
-        source: 'sheet',
-      }));
-
-      const { error } = await supabase.from('products').insert(insertPayload);
-      if (error) throw new Error(`Insert failed: ${error.message}`);
-      insertedCount = diff.toInsert.length;
-    }
-
-    // Updates
-    for (const { id, changes } of diff.toUpdate) {
-      const { error } = await supabase.from('products').update(changes).eq('id', id);
-      if (error) throw new Error(`Update failed for ${id}: ${error.message}`);
-      updatedCount++;
+    // ── 7. Apply diff ─────────────────────────────────────────
+    // Upsert by SKU only writes the sheet-managed columns, so price_proveedor
+    // and featured_label edited in the admin are preserved.
+    const upsertRows = [...toInsert, ...toUpdate].map((r) => ({ ...r, is_active: true, source: 'sheet' }));
+    const CHUNK = 500;
+    for (let i = 0; i < upsertRows.length; i += CHUNK) {
+      const { error } = await supabase
+        .from('products')
+        .upsert(upsertRows.slice(i, i + CHUNK), { onConflict: 'sku' });
+      if (error) throw new Error(`Upsert failed: ${error.message}`);
     }
 
     // Deactivations (SOFT DELETE only — FR-018)
-    if (diff.toDeactivate.length > 0) {
+    for (let i = 0; i < toDeactivate.length; i += CHUNK) {
       const { error } = await supabase
         .from('products')
         .update({ is_active: false })
-        .in('id', diff.toDeactivate);
+        .in('id', toDeactivate.slice(i, i + CHUNK));
       if (error) throw new Error(`Deactivation failed: ${error.message}`);
-      deactivatedCount = diff.toDeactivate.length;
     }
 
-    // Update sync log
     await supabase.from('sync_logs').update({
       status: 'completado',
       finished_at: new Date().toISOString(),
-      inserted_count: insertedCount,
-      updated_count: updatedCount,
-      deactivated_count: deactivatedCount,
+      inserted_count: toInsert.length,
+      updated_count: toUpdate.length,
+      deactivated_count: toDeactivate.length,
     }).eq('id', logId);
 
-    return new Response(JSON.stringify({
+    return json({
       success: true,
-      inserted: insertedCount,
-      updated: updatedCount,
-      deactivated: deactivatedCount,
-      skuConflicts: diff.skuConflicts,
-    }), {
-      headers: { 'Content-Type': 'application/json' },
+      inserted: toInsert.length,
+      updated: toUpdate.length,
+      deactivated: toDeactivate.length,
+      ...warnings,
     });
 
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
 
-    // Log the error — no partial changes remain
     if (logId) {
       await supabase.from('sync_logs').update({
         status: 'error',
@@ -248,9 +325,6 @@ serve(async (req) => {
       }).eq('id', logId);
     }
 
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return json({ error: message }, 500);
   }
 });

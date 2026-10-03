@@ -37,7 +37,12 @@ export function AdminSyncPage() {
         body: { confirmed },
       });
 
-      if (error) throw error;
+      if (error) {
+        // FunctionsHttpError hides the server message inside error.context
+        const ctx = (error as { context?: Response }).context;
+        const serverBody = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
+        throw new Error(serverBody?.error ?? error.message);
+      }
       setResult(data);
       if (confirmed) {
         await fetchLogs();
@@ -118,18 +123,34 @@ export function AdminSyncPage() {
               ) : (
                 <div className="grid grid-cols-3 gap-4">
                   <div className="bg-surface-bright p-4 rounded text-center">
-                    <div className="text-2xl font-bold text-success-green">{(result as any).inserted || (result as any).toInsert}</div>
+                    <div className="text-2xl font-bold text-success-green">{(result as any).inserted ?? (result as any).toInsert ?? 0}</div>
                     <div className="text-xs font-bold text-text-secondary uppercase tracking-wider mt-1">Nuevos</div>
                   </div>
                   <div className="bg-surface-bright p-4 rounded text-center">
-                    <div className="text-2xl font-bold text-blue-600">{(result as any).updated || (result as any).toUpdate}</div>
+                    <div className="text-2xl font-bold text-blue-600">{(result as any).updated ?? (result as any).toUpdate ?? 0}</div>
                     <div className="text-xs font-bold text-text-secondary uppercase tracking-wider mt-1">Actualizados</div>
                   </div>
                   <div className="bg-surface-bright p-4 rounded text-center">
-                    <div className="text-2xl font-bold text-error">{(result as any).deactivated || (result as any).toDeactivate}</div>
+                    <div className="text-2xl font-bold text-error">{(result as any).deactivated ?? (result as any).toDeactivate ?? 0}</div>
                     <div className="text-xs font-bold text-text-secondary uppercase tracking-wider mt-1">Desactivados</div>
                   </div>
                   
+                  {[
+                    { key: 'invalidRows', label: 'Filas sin nombre o precio (ignoradas)' },
+                    { key: 'unmatchedCategories', label: 'Categorías del Sheet que no existen en el sistema' },
+                    { key: 'manualSkipped', label: 'SKUs que ya existen como productos manuales (no se tocaron)' },
+                  ].filter(({ key }) => (result as any)[key]?.length > 0).map(({ key, label }) => (
+                    <div key={key} className="col-span-3 bg-yellow-50 p-4 rounded border border-yellow-200">
+                      <p className="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2">
+                        <span className="material-symbols-outlined text-[16px]">warning</span>
+                        {label} ({(result as any)[key].length})
+                      </p>
+                      <p className="text-xs font-mono text-yellow-700 break-words">
+                        {(result as any)[key].slice(0, 50).join(', ')}
+                      </p>
+                    </div>
+                  ))}
+
                   {((result as any).skuConflicts?.length > 0) && (
                     <div className="col-span-3 mt-4 bg-yellow-50 p-4 rounded border border-yellow-200">
                       <p className="text-sm font-bold text-yellow-800 mb-2 flex items-center gap-2">

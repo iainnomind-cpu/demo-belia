@@ -12,7 +12,22 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const GMAIL_USER = Deno.env.get('GMAIL_USER')!;
 const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD')!;
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
 serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+  const res = await handleRequest(req);
+  for (const [k, v] of Object.entries(corsHeaders)) res.headers.set(k, v);
+  return res;
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 });
   }
@@ -137,4 +152,4 @@ serve(async (req) => {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-});
+}
