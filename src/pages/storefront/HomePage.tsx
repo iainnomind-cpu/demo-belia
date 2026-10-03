@@ -78,10 +78,10 @@ type CatKey = keyof typeof CatIcons;
 /* ─── Quick category links ─────────────────────────────────────── */
 const QUICK_CATS: { label: string; iconKey: CatKey; slug: string }[] = [
   { label: 'Capilar',      iconKey: 'capilar',      slug: 'capilar'      },
-  { label: 'Facial',       iconKey: 'facial',       slug: 'skincare-facial'       },
-  { label: 'Corporal',     iconKey: 'corporal',     slug: 'skincare-corporal'     },
-  { label: 'Tintes',       iconKey: 'tintes',       slug: 'coloracion-tintes'       },
-  { label: 'Herramientas', iconKey: 'herramientas', slug: 'herramientas' },
+  { label: 'Facial',       iconKey: 'facial',       slug: 'facial'                },
+  { label: 'Corporal',     iconKey: 'corporal',     slug: 'corporal'              },
+  { label: 'Tintes',       iconKey: 'tintes',       slug: 'capilar-coloracion'    },
+  { label: 'Herramientas', iconKey: 'herramientas', slug: 'equipo'       },
   { label: 'Marcas',       iconKey: 'marcas',       slug: 'todos'        },
 ];
 
@@ -559,7 +559,7 @@ export function HomePage() {
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-3 flex-shrink-0">
-              <Link to="/categoria/tintes" className="btn-primary text-sm px-6">
+              <Link to="/categoria/capilar-coloracion" className="btn-primary text-sm px-6">
                 <span className="material-symbols-outlined text-[16px]">search</span>
                 Buscar tintes
               </Link>

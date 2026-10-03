@@ -137,7 +137,9 @@ export function AdminSyncPage() {
                   
                   {[
                     { key: 'invalidRows', label: 'Filas sin nombre o precio (ignoradas)' },
-                    { key: 'unmatchedCategories', label: 'Categorías del Sheet que no existen en el sistema' },
+                    { key: 'newCategories', label: (result as any).preview ? 'Categorías nuevas que se crearán' : 'Categorías nuevas creadas' },
+                    { key: 'categoriesDeactivated', label: (result as any).preview ? 'Categorías que se ocultarán (no están en el Sheet)' : 'Categorías ocultadas (no están en el Sheet)' },
+                    { key: 'invalidCategories', label: 'Categorías inválidas en el Sheet (producto queda sin esa categoría)' },
                     { key: 'manualSkipped', label: 'SKUs que ya existen como productos manuales (no se tocaron)' },
                   ].filter(({ key }) => (result as any)[key]?.length > 0).map(({ key, label }) => (
                     <div key={key} className="col-span-3 bg-yellow-50 p-4 rounded border border-yellow-200">

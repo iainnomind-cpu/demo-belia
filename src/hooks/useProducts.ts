@@ -6,6 +6,8 @@ const PAGE_SIZE = 24; // FR-025: Infinite scroll with batches of 24
 
 interface ProductFilters {
   categoryId?: string;
+  /** Category plus its subcategories; takes precedence over categoryId */
+  categoryIds?: string[];
   brand?: string;
   minPrice?: number;
   maxPrice?: number;
@@ -45,7 +47,9 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       .eq('is_active', true)
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
 
-    if (filters.categoryId) {
+    if (filters.categoryIds?.length) {
+      query = query.in('category_id', filters.categoryIds);
+    } else if (filters.categoryId) {
       query = query.eq('category_id', filters.categoryId);
     }
     if (filters.brand) {

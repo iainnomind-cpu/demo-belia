@@ -87,6 +87,25 @@ function normalizeName(value: string): string {
   return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+
+// "Peinado y Estilizado" → "peinado-y-estilizado"
+function slugify(value: string): string {
+  return normalizeName(value).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+// "SHAMPOOS Y ACONDICIONADORES" → "Shampoos y Acondicionadores"
+const SMALL_WORDS = new Set(['y', 'e', 'o', 'u', 'a', 'de', 'del', 'la', 'las', 'el', 'los', 'en', 'con', 'para']);
+function toTitle(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim().split(' ')
+    .map((w, i) => (i > 0 && SMALL_WORDS.has(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(' ');
+}
+
+// Rejects junk like "0" or "-" that would otherwise become a category
+function isValidCategoryName(value: string): boolean {
+  return /[a-z]{2}/.test(normalizeName(value));
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -144,33 +163,79 @@ serve(async (req) => {
     const sheetData = await sheetRes.json() as { values?: string[][] };
     const rows = sheetData.values ?? [];
 
-    // ── 2. Load categories to map "Categoría / Subcategoría" → category_id
+    // ── 2. Categories: the sheet is the source of truth ─────
+    // Missing "Categoría / Subcategoría" pairs are created on confirm; in preview
+    // they get placeholder ids so the diff still counts them as changes.
     const { data: categories, error: catError } = await supabase
       .from('categories')
-      .select('id, name, parent_id');
+      .select('id, name, slug, parent_id, is_active');
     if (catError) throw new Error(`Categories fetch failed: ${catError.message}`);
 
     const parentByName = new Map<string, string>();
     const childByKey = new Map<string, string>(); // `${parentId}|${childName}`
+    const nameById = new Map<string, string>();
+    const slugById = new Map<string, string>();
+    const usedSlugs = new Set<string>();
     for (const c of categories ?? []) {
+      nameById.set(c.id, c.name);
+      slugById.set(c.id, c.slug);
+      usedSlugs.add(c.slug);
       if (!c.parent_id) parentByName.set(normalizeName(c.name), c.id);
       else childByKey.set(`${c.parent_id}|${normalizeName(c.name)}`, c.id);
     }
 
-    const unmatchedCategories = new Set<string>();
-    const resolveCategory = (cat: string | null, sub: string | null): string | null => {
+    const uniqueSlug = (base: string) => {
+      let slug = base;
+      for (let i = 2; usedSlugs.has(slug); i++) slug = `${base}-${i}`;
+      usedSlugs.add(slug);
+      return slug;
+    };
+
+    const newCategories: string[] = [];
+    const invalidCategories = new Set<string>();
+
+    const createCategory = async (name: string, parentId: string | null, placeholderKey: string) => {
+      const displayName = toTitle(name);
+      newCategories.push(parentId ? `${nameById.get(parentId)} / ${displayName}` : displayName);
+      if (!isConfirmed || parentId?.startsWith('new:')) return `new:${placeholderKey}`;
+      const parentSlug = parentId ? slugById.get(parentId) : undefined;
+      const slug = uniqueSlug(parentSlug ? `${parentSlug}-${slugify(name)}` : slugify(name));
+      const { data, error } = await supabase
+        .from('categories')
+        .insert({ name: displayName, slug, parent_id: parentId, sort_order: 100, is_active: true })
+        .select('id')
+        .single();
+      if (error || !data) throw new Error(`No se pudo crear la categoría "${displayName}": ${error?.message}`);
+      nameById.set(data.id, displayName);
+      slugById.set(data.id, slug);
+      return data.id as string;
+    };
+
+    const resolveCategory = async (cat: string | null, sub: string | null): Promise<string | null> => {
       if (!cat) return null;
-      const parentId = parentByName.get(normalizeName(cat));
-      if (!parentId) {
-        unmatchedCategories.add(sub ? `${cat} / ${sub}` : cat);
+      if (!isValidCategoryName(cat)) {
+        invalidCategories.add(sub ? `${cat} / ${sub}` : cat);
         return null;
       }
-      if (sub) {
-        const childId = childByKey.get(`${parentId}|${normalizeName(sub)}`);
-        if (childId) return childId;
-        unmatchedCategories.add(`${cat} / ${sub}`);
+      const parentKey = normalizeName(cat);
+      let parentId = parentByName.get(parentKey);
+      if (!parentId) {
+        parentId = await createCategory(cat, null, parentKey);
+        nameById.set(parentId, toTitle(cat));
+        parentByName.set(parentKey, parentId);
       }
-      return parentId;
+      if (!sub) return parentId;
+      if (!isValidCategoryName(sub)) {
+        invalidCategories.add(`${cat} / ${sub}`);
+        return parentId;
+      }
+      const childKey = `${parentId}|${normalizeName(sub)}`;
+      let childId = childByKey.get(childKey);
+      if (!childId) {
+        childId = await createCategory(sub, parentId, childKey);
+        childByKey.set(childKey, childId);
+      }
+      return childId;
     };
 
     // ── 3. Parse rows, detect duplicate SKUs ─────────────────
@@ -199,7 +264,7 @@ serve(async (req) => {
         name,
         description: cleanText(row[COL.description]),
         brand: cleanText(row[COL.brand]),
-        category_id: resolveCategory(cleanText(row[COL.category]), cleanText(row[COL.subcategory])),
+        category_id: await resolveCategory(cleanText(row[COL.category]), cleanText(row[COL.subcategory])),
         price_publico: pricePublico,
         price_promo: parseMoney(row[COL.promo]),
         stock: Math.max(0, parseInt((row[COL.stock] ?? '').replace(/[^0-9-]/g, ''), 10) || 0),
@@ -257,10 +322,30 @@ serve(async (req) => {
       .filter((p) => p.source === 'sheet' && p.is_active && !sheetSkus.has(p.sku))
       .map((p) => p.id);
 
+    // Categories follow the sheet: active only if a sheet product (or an active
+    // manual product) uses them or one of their subcategories.
+    const parentOf = new Map((categories ?? []).map((c) => [c.id, c.parent_id as string | null]));
+    const keepCategoryIds = new Set<string>();
+    const keepWithParent = (id: string | null) => {
+      if (!id || id.startsWith('new:')) return;
+      keepCategoryIds.add(id);
+      const parent = parentOf.get(id);
+      if (parent) keepCategoryIds.add(parent);
+    };
+    parsedRows.forEach((r) => keepWithParent(r.category_id));
+    existingProducts
+      .filter((p) => p.source === 'manual' && p.is_active)
+      .forEach((p) => keepWithParent(p.category_id));
+
+    const categoriesToDeactivate = (categories ?? []).filter((c) => c.is_active && !keepCategoryIds.has(c.id));
+    const categoriesToActivate = (categories ?? []).filter((c) => !c.is_active && keepCategoryIds.has(c.id));
+
     const warnings = {
       skuConflicts,
       invalidRows, // SKUs without name or price
-      unmatchedCategories: [...unmatchedCategories],
+      newCategories,
+      invalidCategories: [...invalidCategories],
+      categoriesDeactivated: categoriesToDeactivate.map((c) => c.name),
       manualSkipped,
     };
 
@@ -296,6 +381,21 @@ serve(async (req) => {
         .update({ is_active: false })
         .in('id', toDeactivate.slice(i, i + CHUNK));
       if (error) throw new Error(`Deactivation failed: ${error.message}`);
+    }
+
+    if (categoriesToDeactivate.length > 0) {
+      const { error } = await supabase
+        .from('categories')
+        .update({ is_active: false })
+        .in('id', categoriesToDeactivate.map((c) => c.id));
+      if (error) throw new Error(`Category deactivation failed: ${error.message}`);
+    }
+    if (categoriesToActivate.length > 0) {
+      const { error } = await supabase
+        .from('categories')
+        .update({ is_active: true })
+        .in('id', categoriesToActivate.map((c) => c.id));
+      if (error) throw new Error(`Category activation failed: ${error.message}`);
     }
 
     await supabase.from('sync_logs').update({

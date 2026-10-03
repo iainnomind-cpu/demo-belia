@@ -68,6 +68,10 @@ export function CategoryPage() {
 
   const category = categories.find(c => c.slug === slug);
   const categoryId = slug === 'todos' ? undefined : category?.id;
+  // A parent category also lists the products of its subcategories
+  const categoryIdsKey = categoryId
+    ? [categoryId, ...categories.filter(c => c.parent_id === categoryId).map(c => c.id)].join(',')
+    : '';
 
   const { products, loading, loadingMore, hasMore, loadMore, filters, setFilters } = useProducts({
     categoryId,
@@ -84,12 +88,13 @@ export function CategoryPage() {
     setFilters((prev) => ({
       ...prev,
       categoryId,
+      categoryIds: categoryIdsKey ? categoryIdsKey.split(',') : undefined,
       searchQuery: query ?? undefined,
     }));
     // Reset brand cache when category/search changes
     setAllSeenBrands(new Set());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryId, query]);
+  }, [categoryId, categoryIdsKey, query]);
 
   // Supplier prices
   useEffect(() => {
