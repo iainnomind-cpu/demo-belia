@@ -46,7 +46,9 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       .from('products')
       .select('id, sku, name, description, category_id, brand, price_publico, price_promo, stock, image_url, featured_label, is_active, source, created_at, updated_at')
       .eq('is_active', true)
-      // A stable order is required for range() pagination; without it pages can repeat or skip rows
+      // A stable order is required for range() pagination; without it pages can repeat or skip rows.
+      // Products with a photo go first (most sheet rows have none), then newest.
+      .order('image_url', { ascending: true, nullsFirst: false })
       .order('created_at', { ascending: false })
       .order('id', { ascending: true })
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
