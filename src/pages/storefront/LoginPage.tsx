@@ -23,8 +23,8 @@ export function LoginPage() {
   // Redirect if already logged in
   if (user && !loading) {
     if (user.role === 'admin') return <Navigate to={requestedFrom ?? '/admin'} replace />;
-    const from = requestedFrom && !requestedFrom.startsWith('/admin') ? requestedFrom : '/';
-    return <Navigate to={from} replace />;
+    // Non-admins asking for /admin still go there: AdminRoute explains why they can't enter
+    return <Navigate to={requestedFrom ?? '/'} replace />;
   }
 
   const handleOAuth = async (provider: 'google' | 'facebook') => {
