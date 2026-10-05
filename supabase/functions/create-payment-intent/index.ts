@@ -88,7 +88,7 @@ serve(async (req) => {
       throw new Error('Error fetching product data');
     }
 
-    const isProveedor = user.user_metadata?.role === 'proveedor';
+    const isProveedor = user.app_metadata?.role === 'proveedor';
 
     // 3. Calculate total securely and check stock
     let totalCents = 0;

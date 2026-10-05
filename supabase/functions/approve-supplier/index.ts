@@ -44,7 +44,7 @@ async function handleRequest(req: Request): Promise<Response> {
     authHeader.replace('Bearer ', '')
   );
 
-  if (authError || !adminUser || adminUser.user_metadata?.role !== 'admin') {
+  if (authError || !adminUser || adminUser.app_metadata?.role !== 'admin') {
     return new Response('Forbidden: admin role required', { status: 403 });
   }
 
@@ -77,8 +77,9 @@ async function handleRequest(req: Request): Promise<Response> {
       email: supplier.email,
       password: tempPassword,
       email_confirm: true,
+      // Role in app_metadata: only the service role can change it
+      app_metadata: { role: 'proveedor' },
       user_metadata: {
-        role: 'proveedor',
         company_name: supplier.company_name,
         contact_name: supplier.contact_name
       }

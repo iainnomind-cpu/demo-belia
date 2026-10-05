@@ -136,7 +136,7 @@ serve(async (req) => {
     authHeader.replace('Bearer ', '')
   );
 
-  if (authError || !user || user.user_metadata?.role !== 'admin') {
+  if (authError || !user || user.app_metadata?.role !== 'admin') {
     return json({ error: 'Forbidden: admin role required' }, 403);
   }
 

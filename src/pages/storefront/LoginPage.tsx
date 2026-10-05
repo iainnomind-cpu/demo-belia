@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 
 type LoginView = 'options' | 'login' | 'register';
@@ -7,6 +7,11 @@ type LoginView = 'options' | 'login' | 'register';
 export function LoginPage() {
   const { user, signIn, signUp, signInWithOAuth, loading } = useAuth();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  // Destination after login: router state (normal redirect) or ?next= (survives the OAuth round trip)
+  const nextParam = searchParams.get('next');
+  const requestedFrom = (location.state as { from?: string })?.from
+    ?? (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : null);
   const [view, setView] = useState<LoginView>('options');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,15 +22,16 @@ export function LoginPage() {
 
   // Redirect if already logged in
   if (user && !loading) {
-    if (user.role === 'admin') return <Navigate to="/admin" replace />;
-    const from = (location.state as { from?: string })?.from ?? '/';
+    if (user.role === 'admin') return <Navigate to={requestedFrom ?? '/admin'} replace />;
+    const from = requestedFrom && !requestedFrom.startsWith('/admin') ? requestedFrom : '/';
     return <Navigate to={from} replace />;
   }
 
   const handleOAuth = async (provider: 'google' | 'facebook') => {
     setAuthError('');
     setIsSubmitting(true);
-    const { error } = await signInWithOAuth(provider);
+    // Come back to /login so the redirect above sends the user to the right page
+    const { error } = await signInWithOAuth(provider, `/login${requestedFrom ? `?next=${encodeURIComponent(requestedFrom)}` : ''}`);
     if (error) { setAuthError(error); setIsSubmitting(false); }
   };
 
