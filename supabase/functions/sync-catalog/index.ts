@@ -26,13 +26,29 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
-// Columns from PLANTILLA BELIA:
+// Columns of PLANTILLA BELIA are found by their header (row 1), so columns can
+// be moved or added. Default positions are used when a header is not found:
 // A Código | B Título | C Descripción | D Stock | E Precio | F Promoción
 // G Marca | H Categoría | I Subcategoría | J-L URL_Imagen_01..03
-const COL = {
-  sku: 0, name: 1, description: 2, stock: 3, price: 4, promo: 5,
-  brand: 6, category: 7, subcategory: 8, img1: 9, img2: 10, img3: 11,
+// Optional columns (only read when their header exists):
+//   "Activo" (SI/NO) · "Categorías adicionales" (e.g. "PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE")
+const COLUMNS = {
+  sku:         { index: 0,  headers: ['codigo', 'sku', 'clave'] },
+  name:        { index: 1,  headers: ['titulo', 'nombre', 'producto'] },
+  description: { index: 2,  headers: ['descripcion'] },
+  stock:       { index: 3,  headers: ['stock', 'existencia', 'existencias', 'inventario'] },
+  price:       { index: 4,  headers: ['precio', 'preciopublico'] },
+  promo:       { index: 5,  headers: ['promocion', 'preciopromo', 'promo'] },
+  brand:       { index: 6,  headers: ['marca'] },
+  category:    { index: 7,  headers: ['categoria'] },
+  subcategory: { index: 8,  headers: ['subcategoria'] },
+  img1:        { index: 9,  headers: ['urlimagen01', 'urlimagen1', 'imagen1', 'imagen'] },
+  img2:        { index: 10, headers: ['urlimagen02', 'urlimagen2', 'imagen2'] },
+  img3:        { index: 11, headers: ['urlimagen03', 'urlimagen3', 'imagen3'] },
+  active:      { index: -1, headers: ['activo', 'activa', 'visible', 'publicado', 'estado'] },
+  extra:       { index: -1, headers: ['categoriasadicionales', 'categoriaadicional', 'categoriasextra', 'otrascategorias'] },
 } as const;
+type ColumnKey = keyof typeof COLUMNS;
 
 interface SheetRow {
   sku: string;
@@ -40,16 +56,20 @@ interface SheetRow {
   description: string | null;
   brand: string | null;
   category_id: string | null;
+  extra_category_ids: string[];
   price_publico: number;
   price_promo: number | null;
-  stock: number | null; // null = empty cell in the sheet
+  stock: number | null;        // null = empty cell: keep current stock
+  is_active: boolean | null;   // null = empty/missing "Activo" cell: keep current state
   image_url: string | null;
 }
 
-type ExistingProduct = SheetRow & { id: string; is_active: boolean; source: string };
+type ExistingProduct = Omit<SheetRow, 'stock' | 'is_active'> & {
+  id: string; stock: number; is_active: boolean; source: string;
+};
 
-const SHEET_FIELDS = [
-  'name', 'description', 'brand', 'category_id', 'price_publico', 'price_promo', 'stock', 'image_url',
+const COMPARED_FIELDS = [
+  'name', 'description', 'brand', 'category_id', 'price_publico', 'price_promo', 'stock', 'image_url', 'is_active',
 ] as const;
 
 // "$ 1,234.50" → 1234.5 ; "" / "#N/D" → null
@@ -66,6 +86,15 @@ function parseStock(value: string | undefined): number | null {
   const cleaned = (value ?? '').replace(/[^0-9-]/g, '');
   if (!cleaned) return null;
   return Math.max(0, parseInt(cleaned, 10) || 0);
+}
+
+// "SI" / "NO" / "1" / "0" / "TRUE" … → boolean ; empty or unknown → null
+function parseActive(value: string | undefined): boolean | null {
+  const v = normalizeName(value ?? '');
+  if (!v) return null;
+  if (['si', 's', '1', 'true', 'verdadero', 'activo', 'activa', 'x', 'yes'].includes(v)) return true;
+  if (['no', 'n', '0', 'false', 'falso', 'inactivo', 'inactiva'].includes(v)) return false;
+  return null;
 }
 
 // Treat spreadsheet error values (#N/D, #N/A, #REF!...) as empty
@@ -96,6 +125,8 @@ function normalizeName(value: string): string {
   return value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+// "URL_Imagen_01" → "urlimagen01" (headers are compared without spaces/symbols)
+const headerKey = (value: string) => normalizeName(value).replace(/[^a-z0-9]/g, '');
 
 // "Peinado y Estilizado" → "peinado-y-estilizado"
 function slugify(value: string): string {
@@ -113,6 +144,34 @@ function toTitle(value: string): string {
 // Rejects junk like "0" or "-" that would otherwise become a category
 function isValidCategoryName(value: string): boolean {
   return /[a-z]{2}/.test(normalizeName(value));
+}
+
+// Edit distance, used to absorb typos like "ESTILIZDO" or "MAQUINA" vs "Máquinas"
+function levenshtein(a: string, b: string): number {
+  const prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(prev[j] + 1, prev[j - 1] + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return prev[b.length];
+}
+
+// Closest existing name within a small typo tolerance (1 edit for short names, 2 for long ones)
+function closestName(target: string, candidates: string[]): string | null {
+  const compact = (s: string) => s.replace(/[^a-z0-9]/g, '');
+  const t = compact(target);
+  const maxDistance = t.length >= 10 ? 2 : t.length >= 5 ? 1 : 0;
+  let best: { name: string; d: number } | null = null;
+  for (const c of candidates) {
+    const d = levenshtein(t, compact(c));
+    if (d <= maxDistance && (!best || d < best.d)) best = { name: c, d };
+  }
+  return best?.name ?? null;
 }
 
 serve(async (req) => {
@@ -159,8 +218,8 @@ serve(async (req) => {
   }
 
   try {
-    // ── 1. Fetch sheet data ──────────────────────────────────
-    const range = encodeURIComponent(`'${GOOGLE_SHEET_TAB}'!A2:L`);
+    // ── 1. Fetch sheet data (row 1 = headers) ────────────────
+    const range = encodeURIComponent(`'${GOOGLE_SHEET_TAB}'!A1:Z`);
     const sheetUrl = `https://sheets.googleapis.com/v4/spreadsheets/${GOOGLE_SHEET_ID}/values/${range}?key=${GOOGLE_SHEETS_API_KEY}`;
     const sheetRes = await fetch(sheetUrl);
 
@@ -170,7 +229,15 @@ serve(async (req) => {
     }
 
     const sheetData = await sheetRes.json() as { values?: string[][] };
-    const rows = sheetData.values ?? [];
+    const [headerRow = [], ...rows] = sheetData.values ?? [];
+
+    const headerIndex = new Map(headerRow.map((h, i) => [headerKey(h ?? ''), i]));
+    const col = {} as Record<ColumnKey, number>;
+    for (const [key, def] of Object.entries(COLUMNS) as [ColumnKey, (typeof COLUMNS)[ColumnKey]][]) {
+      const found = def.headers.map((h) => headerIndex.get(h)).find((i) => i !== undefined);
+      col[key] = found ?? def.index;
+    }
+    const cell = (row: string[], key: ColumnKey) => (col[key] >= 0 ? row[col[key]] : undefined);
 
     // ── 2. Categories: the sheet is the source of truth ─────
     // Missing "Categoría / Subcategoría" pairs are created on confirm; in preview
@@ -182,6 +249,7 @@ serve(async (req) => {
 
     const parentByName = new Map<string, string>();
     const childByKey = new Map<string, string>(); // `${parentId}|${childName}`
+    const childNames = new Map<string, string[]>(); // parentId → normalized child names
     const nameById = new Map<string, string>();
     const slugById = new Map<string, string>();
     const usedSlugs = new Set<string>();
@@ -189,8 +257,12 @@ serve(async (req) => {
       nameById.set(c.id, c.name);
       slugById.set(c.id, c.slug);
       usedSlugs.add(c.slug);
-      if (!c.parent_id) parentByName.set(normalizeName(c.name), c.id);
-      else childByKey.set(`${c.parent_id}|${normalizeName(c.name)}`, c.id);
+      if (!c.parent_id) {
+        parentByName.set(normalizeName(c.name), c.id);
+      } else {
+        childByKey.set(`${c.parent_id}|${normalizeName(c.name)}`, c.id);
+        childNames.set(c.parent_id, [...(childNames.get(c.parent_id) ?? []), normalizeName(c.name)]);
+      }
     }
 
     const uniqueSlug = (base: string) => {
@@ -200,12 +272,13 @@ serve(async (req) => {
       return slug;
     };
 
-    const newCategories: string[] = [];
+    const newCategories = new Set<string>();
     const invalidCategories = new Set<string>();
+    const approxMatches = new Set<string>(); // "PEINADO Y ESTILIZDO → Peinado y Estilizado"
 
     const createCategory = async (name: string, parentId: string | null, placeholderKey: string) => {
       const displayName = toTitle(name);
-      newCategories.push(parentId ? `${nameById.get(parentId)} / ${displayName}` : displayName);
+      newCategories.add(parentId ? `${nameById.get(parentId)} / ${displayName}` : displayName);
       if (!isConfirmed || parentId?.startsWith('new:')) return `new:${placeholderKey}`;
       const parentSlug = parentId ? slugById.get(parentId) : undefined;
       const slug = uniqueSlug(parentSlug ? `${parentSlug}-${slugify(name)}` : slugify(name));
@@ -229,22 +302,49 @@ serve(async (req) => {
       const parentKey = normalizeName(cat);
       let parentId = parentByName.get(parentKey);
       if (!parentId) {
-        parentId = await createCategory(cat, null, parentKey);
-        nameById.set(parentId, toTitle(cat));
-        parentByName.set(parentKey, parentId);
+        const close = closestName(parentKey, [...parentByName.keys()]);
+        if (close) {
+          parentId = parentByName.get(close)!;
+          approxMatches.add(`${cat} → ${nameById.get(parentId)}`);
+          parentByName.set(parentKey, parentId);
+        } else {
+          parentId = await createCategory(cat, null, parentKey);
+          nameById.set(parentId, toTitle(cat));
+          parentByName.set(parentKey, parentId);
+        }
       }
       if (!sub) return parentId;
       if (!isValidCategoryName(sub)) {
         invalidCategories.add(`${cat} / ${sub}`);
         return parentId;
       }
-      const childKey = `${parentId}|${normalizeName(sub)}`;
+      const subKey = normalizeName(sub);
+      const childKey = `${parentId}|${subKey}`;
       let childId = childByKey.get(childKey);
       if (!childId) {
-        childId = await createCategory(sub, parentId, childKey);
+        const close = closestName(subKey, childNames.get(parentId) ?? []);
+        if (close) {
+          childId = childByKey.get(`${parentId}|${close}`)!;
+          approxMatches.add(`${cat} / ${sub} → ${nameById.get(parentId)} / ${nameById.get(childId)}`);
+        } else {
+          childId = await createCategory(sub, parentId, childKey);
+          childNames.set(parentId, [...(childNames.get(parentId) ?? []), subKey]);
+        }
         childByKey.set(childKey, childId);
       }
       return childId;
+    };
+
+    // "PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE" → category ids
+    const resolveExtraCategories = async (value: string | undefined, mainId: string | null) => {
+      const ids: string[] = [];
+      for (const part of (cleanText(value) ?? '').split(/[;\n|]+/)) {
+        if (!part.trim()) continue;
+        const [cat, ...rest] = part.split('/');
+        const id = await resolveCategory(cleanText(cat), cleanText(rest.join('/')));
+        if (id && id !== mainId && !ids.includes(id)) ids.push(id);
+      }
+      return ids;
     };
 
     // ── 3. Parse rows, detect duplicate SKUs ─────────────────
@@ -253,30 +353,33 @@ serve(async (req) => {
     const invalidRows: string[] = [];
 
     for (const row of rows) {
-      const sku = row[COL.sku]?.trim();
+      const sku = cell(row, 'sku')?.trim();
       if (!sku) continue;
 
       skuCounts[sku] = (skuCounts[sku] ?? 0) + 1;
       if (skuCounts[sku] > 1) continue; // Skip duplicates (take first occurrence)
 
-      const name = cleanText(row[COL.name]);
-      const pricePublico = parseMoney(row[COL.price]);
+      const name = cleanText(cell(row, 'name'));
+      const pricePublico = parseMoney(cell(row, 'price'));
       if (!name || pricePublico === null) {
         invalidRows.push(sku);
         continue;
       }
 
-      const images = [row[COL.img1], row[COL.img2], row[COL.img3]].map(normalizeImageUrl);
+      const images = [cell(row, 'img1'), cell(row, 'img2'), cell(row, 'img3')].map(normalizeImageUrl);
+      const categoryId = await resolveCategory(cleanText(cell(row, 'category')), cleanText(cell(row, 'subcategory')));
 
       parsedRows.push({
         sku,
         name,
-        description: cleanText(row[COL.description]),
-        brand: cleanText(row[COL.brand]),
-        category_id: await resolveCategory(cleanText(row[COL.category]), cleanText(row[COL.subcategory])),
+        description: cleanText(cell(row, 'description')),
+        brand: cleanText(cell(row, 'brand')),
+        category_id: categoryId,
+        extra_category_ids: await resolveExtraCategories(cell(row, 'extra'), categoryId),
         price_publico: pricePublico,
-        price_promo: parseMoney(row[COL.promo]),
-        stock: parseStock(row[COL.stock]),
+        price_promo: parseMoney(cell(row, 'promo')),
+        stock: parseStock(cell(row, 'stock')),
+        is_active: parseActive(cell(row, 'active')),
         image_url: images.find((u) => u !== null) ?? null,
       });
     }
@@ -291,9 +394,14 @@ serve(async (req) => {
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
         .from('products')
-        .select('id, sku, name, description, brand, category_id, price_publico, price_promo, stock, image_url, is_active, source')
+        .select('id, sku, name, description, brand, category_id, extra_category_ids, price_publico, price_promo, stock, image_url, is_active, source')
         .range(from, from + PAGE - 1);
-      if (error) throw new Error(`Products fetch failed: ${error.message}`);
+      if (error) {
+        if (error.message.includes('extra_category_ids')) {
+          throw new Error('Falta ejecutar la migración 0007_extra_categories.sql en Supabase (SQL Editor).');
+        }
+        throw new Error(`Products fetch failed: ${error.message}`);
+      }
       existingProducts.push(...(data as ExistingProduct[]));
       if (!data || data.length < PAGE) break;
     }
@@ -305,6 +413,7 @@ serve(async (req) => {
     const toInsert: SheetRow[] = [];
     const toUpdate: SheetRow[] = [];
     const manualSkipped: string[] = [];
+    const sameIds = (a: string[] = [], b: string[] = []) => [...a].sort().join() === [...b].sort().join();
 
     for (const row of parsedRows) {
       const existing = existingBySku.get(row.sku);
@@ -316,8 +425,8 @@ serve(async (req) => {
         manualSkipped.push(row.sku); // Never touch source='manual'
         continue;
       }
-      const changed = !existing.is_active || SHEET_FIELDS.some((f) => {
-        if (f === 'stock' && row.stock === null) return false; // empty cell: keep current stock
+      const changed = !sameIds(existing.extra_category_ids, row.extra_category_ids) || COMPARED_FIELDS.some((f) => {
+        if ((f === 'stock' || f === 'is_active') && row[f] === null) return false; // empty cell: keep current
         const a = existing[f] ?? null;
         const b = row[f] ?? null;
         // NUMERIC columns may come back as strings
@@ -332,8 +441,12 @@ serve(async (req) => {
       .filter((p) => p.source === 'sheet' && p.is_active && !sheetSkus.has(p.sku))
       .map((p) => p.id);
 
-    // Categories follow the sheet: active only if a sheet product (or an active
-    // manual product) uses them or one of their subcategories.
+    // Final visibility of each sheet row (the storefront only shows active products with a photo)
+    const willBeActive = (r: SheetRow) => r.is_active ?? existingBySku.get(r.sku)?.is_active ?? true;
+    const visibleRows = parsedRows.filter((r) => willBeActive(r) && r.image_url && existingBySku.get(r.sku)?.source !== 'manual');
+
+    // Categories follow the sheet: active only if a visible product (sheet or manual)
+    // uses them — directly, as an extra category, or through a subcategory.
     const parentOf = new Map((categories ?? []).map((c) => [c.id, c.parent_id as string | null]));
     const keepCategoryIds = new Set<string>();
     const keepWithParent = (id: string | null) => {
@@ -342,10 +455,10 @@ serve(async (req) => {
       const parent = parentOf.get(id);
       if (parent) keepCategoryIds.add(parent);
     };
-    parsedRows.forEach((r) => keepWithParent(r.category_id));
+    visibleRows.forEach((r) => { keepWithParent(r.category_id); r.extra_category_ids.forEach(keepWithParent); });
     existingProducts
-      .filter((p) => p.source === 'manual' && p.is_active)
-      .forEach((p) => keepWithParent(p.category_id));
+      .filter((p) => p.source === 'manual' && p.is_active && p.image_url)
+      .forEach((p) => { keepWithParent(p.category_id); (p.extra_category_ids ?? []).forEach(keepWithParent); });
 
     const categoriesToDeactivate = (categories ?? []).filter((c) => c.is_active && !keepCategoryIds.has(c.id));
     const categoriesToActivate = (categories ?? []).filter((c) => !c.is_active && keepCategoryIds.has(c.id));
@@ -353,17 +466,26 @@ serve(async (req) => {
     const warnings = {
       skuConflicts,
       invalidRows, // SKUs without name or price
-      newCategories,
+      newCategories: [...newCategories],
+      approxMatches: [...approxMatches],
       invalidCategories: [...invalidCategories],
       categoriesDeactivated: categoriesToDeactivate.map((c) => c.name),
       manualSkipped,
+    };
+    const stats = {
+      totalRows: parsedRows.length,
+      visible: visibleRows.length,
+      hiddenNoImage: parsedRows.filter((r) => willBeActive(r) && !r.image_url).length,
+      hiddenInactive: parsedRows.filter((r) => !willBeActive(r)).length,
+      activeColumn: col.active >= 0,
+      extraColumn: col.extra >= 0,
     };
 
     // ── 6. Preview mode: return diff without applying ─────────
     if (!isConfirmed) {
       return json({
         preview: true,
-        totalRows: parsedRows.length,
+        ...stats,
         toInsert: toInsert.length,
         toUpdate: toUpdate.length,
         toDeactivate: toDeactivate.length,
@@ -374,16 +496,25 @@ serve(async (req) => {
 
     // ── 7. Apply diff ─────────────────────────────────────────
     // Upsert by SKU only writes the sheet-managed columns, so price_proveedor
-    // and featured_label edited in the admin are preserved.
-    // Each upsert batch must have the same columns, so rows that keep their
-    // current stock (empty cell) go in a separate batch without the stock column.
-    const base = { is_active: true, source: 'sheet' };
-    const inserts = toInsert.map((r) => ({ ...r, ...base, stock: r.stock ?? DEFAULT_STOCK_WHEN_EMPTY }));
-    const updatesWithStock = toUpdate.filter((r) => r.stock !== null).map((r) => ({ ...r, ...base }));
-    const updatesKeepStock = toUpdate.filter((r) => r.stock === null).map(({ stock: _stock, ...r }) => ({ ...r, ...base }));
+    // and featured_label edited in the admin are preserved. Empty Stock/Activo
+    // cells leave the column out, so the current value is kept.
+    const toPayload = (r: SheetRow, isNew: boolean) => {
+      const { stock, is_active, ...rest } = r;
+      const payload: Record<string, unknown> = { ...rest, source: 'sheet' };
+      if (stock !== null || isNew) payload.stock = stock ?? DEFAULT_STOCK_WHEN_EMPTY;
+      if (is_active !== null || isNew) payload.is_active = is_active ?? true;
+      return payload;
+    };
+
+    // Each upsert batch must have the same columns → group rows by their column set
+    const batches = new Map<string, Record<string, unknown>[]>();
+    for (const payload of [...toInsert.map((r) => toPayload(r, true)), ...toUpdate.map((r) => toPayload(r, false))]) {
+      const key = Object.keys(payload).sort().join(',');
+      batches.set(key, [...(batches.get(key) ?? []), payload]);
+    }
 
     const CHUNK = 500;
-    for (const batch of [inserts, updatesWithStock, updatesKeepStock]) {
+    for (const batch of batches.values()) {
       for (let i = 0; i < batch.length; i += CHUNK) {
         const { error } = await supabase
           .from('products')
@@ -426,6 +557,7 @@ serve(async (req) => {
 
     return json({
       success: true,
+      ...stats,
       inserted: toInsert.length,
       updated: toUpdate.length,
       deactivated: toDeactivate.length,

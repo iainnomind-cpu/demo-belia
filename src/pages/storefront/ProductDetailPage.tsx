@@ -75,6 +75,7 @@ export function ProductDetailPage() {
         .select('id, sku, name, description, category_id, brand, price_publico, price_promo, stock, image_url, featured_label, is_active, source, created_at, updated_at')
         .eq('id', id)
         .eq('is_active', true)
+        .filter('image_url', 'not.is', null)
         .single();
 
       if (fetchErr || !data) {

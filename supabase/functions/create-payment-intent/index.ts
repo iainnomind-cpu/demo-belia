@@ -81,7 +81,7 @@ serve(async (req) => {
     const productIds = items.map((item) => item.product_id);
     const { data: dbProducts, error: dbError } = await supabaseAdmin
       .from('products')
-      .select('id, name, price_publico, price_promo, price_proveedor, stock, is_active')
+      .select('id, name, price_publico, price_promo, price_proveedor, stock, is_active, image_url')
       .in('id', productIds);
 
     if (dbError || !dbProducts) {
@@ -97,7 +97,8 @@ serve(async (req) => {
     for (const item of items) {
       const dbProduct = dbProducts.find((p) => p.id === item.product_id);
 
-      if (!dbProduct || !dbProduct.is_active) {
+      // Same rule as the storefront: inactive products or products without a photo are not sold
+      if (!dbProduct || !dbProduct.is_active || !dbProduct.image_url) {
         throw new Error(`Un producto del carrito ya no está disponible${item.name ? `: ${item.name}` : ''}`);
       }
 

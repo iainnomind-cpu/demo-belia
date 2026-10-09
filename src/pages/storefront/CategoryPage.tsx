@@ -84,10 +84,11 @@ export function CategoryPage() {
   const [allSeenBrands, setAllSeenBrands] = useState<Set<string>>(new Set());
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Sync categoryId and searchQuery when route changes, but PRESERVE brand/price filters
+  // Sync categoryId and searchQuery when route changes. Brand/price filters are kept
+  // while browsing categories, but a new search starts clean (search is independent).
   useEffect(() => {
     setFilters((prev) => ({
-      ...prev,
+      ...(query ? {} : prev),
       categoryId,
       categoryIds: categoryIdsKey ? categoryIdsKey.split(',') : undefined,
       searchQuery: query ?? undefined,
@@ -258,7 +259,7 @@ export function CategoryPage() {
                 Intenta ajustando los filtros o explora otra categoría.
               </p>
               <button
-                onClick={() => setFilters({})}
+                onClick={() => setFilters(prev => ({ ...prev, brand: undefined, minPrice: undefined, maxPrice: undefined }))}
                 className="btn-primary text-sm mt-6"
               >
                 Limpiar filtros

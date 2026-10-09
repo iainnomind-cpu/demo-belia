@@ -85,7 +85,8 @@ export function FiltersSidebar({ brands, currentFilters, onFilterChange }: Filte
   const handleClearAll = () => {
     setMinPriceStr('');
     setMaxPriceStr('');
-    onFilterChange({});
+    // Only brand and price are cleared: the category (or search) being viewed stays
+    onFilterChange({ ...currentFilters, brand: undefined, minPrice: undefined, maxPrice: undefined });
   };
 
   return (

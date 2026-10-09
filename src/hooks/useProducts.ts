@@ -46,10 +46,11 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       .from('products')
       .select('id, sku, name, description, category_id, brand, price_publico, price_promo, stock, image_url, featured_label, is_active, source, created_at, updated_at')
       .eq('is_active', true)
-      // A stable order is required for range() pagination; without it pages can repeat or skip rows.
-      // Products with a photo go first (most sheet rows have none), then newest.
-      .order('image_url', { ascending: true, nullsFirst: false })
+      // Products without a photo are never shown in the store
+      .filter('image_url', 'not.is', null)
+      // A stable order is required for range() pagination; without it pages can repeat or skip rows
       .order('created_at', { ascending: false })
+      .order('name', { ascending: true })
       .order('id', { ascending: true })
       .range(currentOffset, currentOffset + PAGE_SIZE - 1);
 
@@ -57,10 +58,13 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
       query = query.not('featured_label', 'is', null);
     }
 
-    if (filters.categoryIds?.length) {
-      query = query.in('category_id', filters.categoryIds);
-    } else if (filters.categoryId) {
-      query = query.eq('category_id', filters.categoryId);
+    // The search box is independent: a search looks in the whole catalog
+    const term = filters.searchQuery?.replace(/[,()*%\\{}"]/g, ' ').trim();
+    const categoryIds = filters.categoryIds?.length ? filters.categoryIds : filters.categoryId ? [filters.categoryId] : [];
+    if (!term && categoryIds.length) {
+      // Main category OR any of the extra categories (e.g. Profesionales / Waxers)
+      const list = categoryIds.join(',');
+      query = query.or(`category_id.in.(${list}),extra_category_ids.ov.{${list}}`);
     }
     if (filters.brand) {
       query = query.eq('brand', filters.brand);
@@ -71,12 +75,9 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     if (filters.maxPrice !== undefined) {
       query = query.lte('price_publico', filters.maxPrice);
     }
-    if (filters.searchQuery) {
-      // Commas, parentheses and wildcards would break the PostgREST or() syntax
-      const term = filters.searchQuery.replace(/[,()*%\\]/g, ' ').trim();
-      if (term) {
-        query = query.or(`name.ilike.%${term}%,brand.ilike.%${term}%,sku.ilike.%${term}%`);
-      }
+    if (term) {
+      // Commas, parentheses and wildcards (stripped above) would break the PostgREST or() syntax
+      query = query.or(`name.ilike.%${term}%,brand.ilike.%${term}%,sku.ilike.%${term}%`);
     }
 
     return query;

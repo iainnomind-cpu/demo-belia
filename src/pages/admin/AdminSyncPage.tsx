@@ -17,7 +17,7 @@ export function AdminSyncPage() {
       .select('*')
       .order('started_at', { ascending: false })
       .limit(10);
-    
+
     if (data) setLogs(data);
     setLoading(false);
   };
@@ -28,7 +28,7 @@ export function AdminSyncPage() {
 
   const handleSync = async (confirmed: boolean = false) => {
     if (!session) return;
-    
+
     setSyncing(true);
     setResult(null);
 
@@ -64,18 +64,18 @@ export function AdminSyncPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        
+
         {/* Action Panel */}
         <div className="lg:col-span-1 bg-white rounded-xl border border-divider p-6 shadow-sm h-max">
           <div className="flex items-center gap-3 text-belia-red mb-4 border-b border-divider pb-4">
             <span className="material-symbols-outlined text-3xl">sync</span>
             <h2 className="font-bold text-lg">Control de Sync</h2>
           </div>
-          
+
           <p className="text-sm text-text-secondary mb-6 leading-relaxed">
             La sincronización actualizará el catálogo de productos basándose en <strong>PLANTILLA BELIA</strong> en Google Sheets. Los productos marcados como manuales no se verán afectados.
           </p>
-          
+
           <div className="space-y-3">
             <button
               onClick={() => handleSync(false)}
@@ -107,7 +107,7 @@ export function AdminSyncPage() {
 
         {/* Results / Logs Panel */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* Active Result */}
           {result && (
             <div className={`bg-white rounded-xl border ${result.error ? 'border-error' : 'border-success-green'} p-6 shadow-sm`}>
@@ -134,9 +134,26 @@ export function AdminSyncPage() {
                     <div className="text-2xl font-bold text-error">{(result as any).deactivated ?? (result as any).toDeactivate ?? 0}</div>
                     <div className="text-xs font-bold text-text-secondary uppercase tracking-wider mt-1">Desactivados</div>
                   </div>
-                  
+
+                  {(result as any).visible !== undefined && (
+                    <div className="col-span-3 bg-surface-bright p-4 rounded text-sm text-text-secondary space-y-1">
+                      <p>
+                        <strong className="text-text-primary">{(result as any).visible}</strong> productos visibles en la tienda
+                        {' · '}{(result as any).hiddenNoImage} ocultos por no tener foto
+                        {' · '}{(result as any).hiddenInactive} desactivados con la columna «Activo»
+                      </p>
+                      {!(result as any).activeColumn && (
+                        <p className="text-xs text-text-meta">No se encontró la columna «Activo» en el Sheet: los productos conservan su estado actual.</p>
+                      )}
+                      {!(result as any).extraColumn && (
+                        <p className="text-xs text-text-meta">No se encontró la columna «Categorías adicionales» en el Sheet.</p>
+                      )}
+                    </div>
+                  )}
+
                   {[
                     { key: 'invalidRows', label: 'Filas sin nombre o precio (ignoradas)' },
+                    { key: 'approxMatches', label: 'Nombres de categoría con errores de escritura (se unieron a la categoría existente)' },
                     { key: 'newCategories', label: (result as any).preview ? 'Categorías nuevas que se crearán' : 'Categorías nuevas creadas' },
                     { key: 'categoriesDeactivated', label: (result as any).preview ? 'Categorías que se ocultarán (no están en el Sheet)' : 'Categorías ocultadas (no están en el Sheet)' },
                     { key: 'invalidCategories', label: 'Categorías inválidas en el Sheet (producto queda sin esa categoría)' },
@@ -175,7 +192,7 @@ export function AdminSyncPage() {
               <h3 className="font-bold text-text-primary">Historial Reciente</h3>
               <button onClick={fetchLogs} className="text-sm text-belia-red hover:underline font-medium">Actualizar historial</button>
             </div>
-            
+
             <table className="w-full text-sm text-left">
               <thead className="bg-gray-50 text-text-secondary font-medium border-b border-divider uppercase tracking-wider text-xs">
                 <tr>

@@ -97,6 +97,8 @@ export interface Product {
   featured_label: string | null;
   is_active: boolean;
   source: 'sheet' | 'manual';
+  /** Extra categories besides category_id (e.g. Profesionales / Waxers) */
+  extra_category_ids?: string[];
   created_at: string;
   updated_at: string;
 }
