@@ -29,6 +29,8 @@ const validPromo = (publico: number, promo: number | null) =>
   promo && promo > 0 && promo < publico ? promo : null;
 
 interface ShippingAddress {
+  name?: string;
+  phone?: string;
   street?: string;
   city?: string;
   state?: string;
@@ -82,7 +84,7 @@ serve(async (req) => {
     }
 
     const address = shipping_address ?? {};
-    if (!address.street?.trim() || !address.city?.trim() || !address.state?.trim() || !address.zip?.trim()) {
+    if (!address.name?.trim() || !address.phone?.trim() || !address.street?.trim() || !address.city?.trim() || !address.state?.trim() || !address.zip?.trim()) {
       return json({ error: 'La dirección de envío está incompleta' }, 400);
     }
 
@@ -134,7 +136,8 @@ serve(async (req) => {
         tipo: isB2B ? 'mayoreo' : 'publico',
         status: 'Procesando',
         total_amount: pi.amount / 100, // What was actually charged
-        shipping_address: { ...address, country: 'MX' },
+        // The customer's email is stored with the order so the admin can contact them
+        shipping_address: { ...address, email: user.email, country: 'MX' },
         stripe_payment_intent: pi.id,
       })
       .select('id')

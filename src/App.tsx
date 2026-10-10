@@ -6,6 +6,7 @@ import { HomePage } from './pages/storefront/HomePage';
 import { CategoryPage } from './pages/storefront/CategoryPage';
 import { ProductDetailPage } from './pages/storefront/ProductDetailPage';
 import { CheckoutPage } from './pages/storefront/CheckoutPage';
+import { OrderConfirmationPage } from './pages/storefront/OrderConfirmationPage';
 import { SupplierFormPage } from './pages/storefront/SupplierFormPage';
 import { LoginPage } from './pages/storefront/LoginPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -26,6 +27,7 @@ function App() {
           <Route path="/categoria/:slug" element={<CategoryPage />} />
           <Route path="/producto/:id" element={<ProductDetailPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/pedido/:id" element={<OrderConfirmationPage />} />
           <Route path="/proveedores" element={<SupplierFormPage />} />
           <Route path="/login" element={<LoginPage />} />
         </Route>

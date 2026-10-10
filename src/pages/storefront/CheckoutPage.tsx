@@ -10,12 +10,12 @@ import { supabase } from '../../lib/supabase';
 const STRIPE_PUBLIC_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY as string | undefined;
 const stripePromise = STRIPE_PUBLIC_KEY ? loadStripe(STRIPE_PUBLIC_KEY) : null;
 
-type ShippingAddress = { street: string; city: string; state: string; zip: string; country: string };
+type ShippingAddress = { name: string; phone: string; street: string; city: string; state: string; zip: string; country: string };
 const ADDRESS_STORAGE_KEY = 'belia-checkout-address';
 
 // The order is created server-side from the verified Stripe payment
-async function confirmOrder(paymentIntentId: string, shippingAddress: ShippingAddress) {
-  const { error } = await supabase.functions.invoke('confirm-order', {
+async function confirmOrder(paymentIntentId: string, shippingAddress: ShippingAddress): Promise<string> {
+  const { data, error } = await supabase.functions.invoke('confirm-order', {
     body: { payment_intent_id: paymentIntentId, shipping_address: shippingAddress },
   });
   if (error) {
@@ -23,6 +23,7 @@ async function confirmOrder(paymentIntentId: string, shippingAddress: ShippingAd
     const body = ctx && typeof ctx.json === 'function' ? await ctx.json().catch(() => null) : null;
     throw new Error(body?.error ?? error.message);
   }
+  return data.order_id as string;
 }
 
 function CheckoutForm({
@@ -51,9 +52,13 @@ function CheckoutForm({
     e.preventDefault();
     if (!stripe || !elements || items.length === 0 || !user) return;
 
-    const { street, city, state, zip } = shippingAddress;
-    if (!street.trim() || !city.trim() || !state.trim() || !/^\d{5}$/.test(zip.trim())) {
-      setError('Completa la dirección de envío (el código postal debe tener 5 dígitos) antes de pagar.');
+    const { name, phone, street, city, state, zip } = shippingAddress;
+    if (!name.trim() || !street.trim() || !city.trim() || !state.trim() || !/^\d{5}$/.test(zip.trim())) {
+      setError('Completa tus datos de envío (el código postal debe tener 5 dígitos) antes de pagar.');
+      return;
+    }
+    if (phone.replace(/\D/g, '').length < 10) {
+      setError('Escribe un teléfono de contacto de 10 dígitos para la entrega.');
       return;
     }
 
@@ -92,8 +97,9 @@ function CheckoutForm({
       }
 
       if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+        let orderId: string;
         try {
-          await confirmOrder(result.paymentIntent.id, shippingAddress);
+          orderId = await confirmOrder(result.paymentIntent.id, shippingAddress);
         } catch (orderErr) {
           // The card WAS charged: never tell the customer to pay again
           const msg = orderErr instanceof Error ? orderErr.message : String(orderErr);
@@ -103,7 +109,7 @@ function CheckoutForm({
         try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }
         clearCart();
         setCheckoutSuccess(true);
-        navigate('/'); // Redirigir a inicio con éxito
+        navigate(`/pedido/${orderId}`, { replace: true });
       }
     } catch (err: any) {
       setError(err.message || 'Error al procesar el pago. Por favor intenta nuevamente.');
@@ -219,6 +225,8 @@ export function CheckoutPage() {
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
 
   const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
+    name: '',
+    phone: '',
     street: '',
     city: '',
     state: '',
@@ -246,11 +254,11 @@ export function CheckoutPage() {
       return;
     }
     confirmOrder(returnedPaymentIntent, saved)
-      .then(() => {
+      .then((orderId) => {
         try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }
         clearCart();
         setCheckoutSuccess(true);
-        navigate('/', { replace: true });
+        navigate(`/pedido/${orderId}`, { replace: true });
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
@@ -383,6 +391,14 @@ export function CheckoutPage() {
                 Dirección de Envío
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Nombre de quien recibe</label>
+                  <input type="text" required autoComplete="name" value={shippingAddress.name} onChange={e => setShippingAddress({...shippingAddress, name: e.target.value})} className="w-full border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-text-secondary mb-1">Teléfono</label>
+                  <input type="tel" required autoComplete="tel" placeholder="10 dígitos" value={shippingAddress.phone} onChange={e => setShippingAddress({...shippingAddress, phone: e.target.value})} className="w-full border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red" />
+                </div>
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-text-secondary mb-1">Calle y número</label>
                   <input type="text" required value={shippingAddress.street} onChange={e => setShippingAddress({...shippingAddress, street: e.target.value})} className="w-full border-gray-300 rounded-lg focus:ring-belia-red focus:border-belia-red" />
