@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import { formatPrice } from '../../lib/pricing';
-import { fetchOrderItems, formatAddress, orderNumber, type OrderItemDetail, type OrderShipping } from '../../lib/orders';
+import { fetchOrderItems, formatAddress, orderNumber, trackingText, STATUS_STYLES, type OrderItemDetail, type OrderShipping } from '../../lib/orders';
 import type { Order } from '../../types/database';
 
 /**
@@ -81,7 +81,7 @@ export function OrderConfirmationPage() {
             ¡Gracias por tu compra{shipping.name ? `, ${shipping.name.split(' ')[0]}` : ''}!
           </h1>
           <p className="text-text-secondary mb-6">
-            Recibimos tu pago y ya estamos preparando tu pedido.
+            {order.status === 'Procesando' ? 'Recibimos tu pago y ya estamos preparando tu pedido.' : STATUS_STYLES[order.status].label + '.'}
           </p>
           <div className="inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-6 bg-belia-blush rounded-2xl px-6 py-4">
             <div>
@@ -140,7 +140,13 @@ export function OrderConfirmationPage() {
             </div>
             <div className="bg-white rounded-2xl border border-divider p-6">
               <h2 className="font-bold text-belia-charcoal mb-2">Estado</h2>
-              <span className="inline-block bg-yellow-100 text-yellow-800 text-xs font-bold px-2.5 py-1 rounded uppercase tracking-wider">{order.status}</span>
+              <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full ${STATUS_STYLES[order.status].className}`}>
+                <span className="material-symbols-outlined text-[14px]">{STATUS_STYLES[order.status].icon}</span>
+                {STATUS_STYLES[order.status].label}
+              </span>
+              {trackingText(order.tracking_info) && (
+                <p className="text-sm text-text-secondary mt-3">Guía de envío: <strong className="text-belia-charcoal">{trackingText(order.tracking_info)}</strong></p>
+              )}
               <p className="text-xs text-text-meta mt-3">
                 ¿Dudas con tu pedido? Escríbenos mencionando tu número de pedido.
               </p>

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { CarouselSlide, HeroContent } from '../../hooks/useSiteContent';
+import { BUSINESS_DEFAULTS, type BusinessInfo, type CarouselSlide, type HeroContent } from '../../hooks/useSiteContent';
 
 // One shape covers every block: hero fields, carousel slides or a simple { value } setting
-type ContentData = HeroContent & { slides?: CarouselSlide[]; value?: string };
+type ContentData = HeroContent & BusinessInfo & { slides?: CarouselSlide[]; value?: string };
 
 interface SiteContent {
   id: string;
@@ -12,6 +12,22 @@ interface SiteContent {
 
 const HERO_ID = 'home_banner_main';
 const CAROUSEL_ID = 'home_carousel';
+const BUSINESS_ID = 'business_info';
+
+const BUSINESS_FIELDS: { key: keyof BusinessInfo; label: string; help?: string; legal?: boolean }[] = [
+  { key: 'nombre_comercial', label: 'Nombre comercial' },
+  { key: 'razon_social', label: 'Razón social o nombre del titular', help: 'Aparece como responsable en el aviso de privacidad y en los términos.', legal: true },
+  { key: 'rfc', label: 'RFC', legal: true },
+  { key: 'domicilio', label: 'Domicilio', help: 'Requerido en el aviso de privacidad.', legal: true },
+  { key: 'email', label: 'Correo de atención a clientes', help: 'Se muestra en contacto y en los correos. Los avisos de pedidos nuevos llegan aquí.', legal: true },
+  { key: 'telefono', label: 'Teléfono' },
+  { key: 'whatsapp', label: 'WhatsApp', help: 'Solo números con lada de país. Ej: 523380007919' },
+  { key: 'horario', label: 'Horario de atención' },
+  { key: 'tiempo_entrega', label: 'Tiempo de entrega', help: 'Se muestra en la política de envíos. Ej: 3 a 7 días hábiles' },
+  { key: 'dias_devolucion', label: 'Días para devoluciones', help: 'Ej: 15' },
+  { key: 'instagram', label: 'Instagram (URL completa)' },
+  { key: 'facebook', label: 'Facebook (URL completa)' },
+];
 
 const SETTING_LABELS: Record<string, { label: string; help: string }> = {
   vip_threshold: { label: 'Umbral VIP (MXN)', help: 'Un cliente recibe la insignia VIP cuando la suma de sus compras supera este monto.' },
@@ -159,7 +175,11 @@ export function AdminContentPage() {
   };
 
   // ── Settings: any other block with a simple { value } ──
-  const settings = contents.filter(c => c.id !== HERO_ID && c.id !== CAROUSEL_ID);
+  const settings = contents.filter(c => c.id !== HERO_ID && c.id !== CAROUSEL_ID && c.id !== BUSINESS_ID);
+
+  // ── Business info ──────────────────────────────────────
+  const business: BusinessInfo = getData(BUSINESS_ID);
+  const missingLegal = BUSINESS_FIELDS.filter(f => f.legal && !business[f.key]?.trim());
 
   if (loading) {
     return <p className="text-text-meta text-sm">Cargando contenido…</p>;
@@ -292,6 +312,36 @@ export function AdminContentPage() {
           )}
 
           {renderSave(CAROUSEL_ID)}
+        </section>
+
+        {/* ─── Business info ───────────────────────────── */}
+        <section className="bg-white rounded-xl border border-divider p-6 shadow-sm space-y-4 xl:col-span-2">
+          <div className="flex items-center gap-2 border-b border-divider pb-3">
+            <span className="material-symbols-outlined text-belia-red">storefront</span>
+            <h2 className="font-bold text-lg text-text-primary">Datos del negocio</h2>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Se usan en el pie de página, en las páginas legales (términos, aviso de privacidad, envíos y devoluciones), en Contacto, en los botones de WhatsApp y en los correos.
+          </p>
+          {missingLegal.length > 0 && (
+            <p className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 rounded p-3">
+              Completa antes de abrir la tienda: <strong>{missingLegal.map(f => f.label).join(', ')}</strong>. Son necesarios para las páginas legales.
+            </p>
+          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {BUSINESS_FIELDS.map(f => (
+              <Field key={f.key} label={f.label} help={f.help}>
+                <input
+                  type="text"
+                  value={business[f.key] ?? ''}
+                  onChange={e => setData(BUSINESS_ID, { ...business, [f.key]: e.target.value })}
+                  placeholder={BUSINESS_DEFAULTS[f.key]}
+                  className={inputClass}
+                />
+              </Field>
+            ))}
+          </div>
+          {renderSave(BUSINESS_ID)}
         </section>
 
         {/* ─── General settings ────────────────────────── */}

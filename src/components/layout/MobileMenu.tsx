@@ -11,13 +11,14 @@ interface MobileMenuProps {
   onClose: () => void;
   categoryTree: CategoryTree[];
   onOpenAuth: () => void;
+  isLoggedIn?: boolean;
 }
 
 /**
  * MobileMenu — Full-screen slide-in menu for mobile viewports (≤ 375px).
  * Premium glassmorphism overlay, spring physics, and Sephora-like taxonomy.
  */
-export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: MobileMenuProps) {
+export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth, isLoggedIn }: MobileMenuProps) {
   return (
     <AnimatePresence>
       {isOpen && (
@@ -66,7 +67,7 @@ export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: Mobile
             <div className="flex-1 overflow-y-auto hide-scrollbar bg-white">
               <nav className="py-2">
                 {categoryTree.map((cat, i) => (
-                  <motion.div 
+                  <motion.div
                     key={cat.id}
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -81,7 +82,7 @@ export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: Mobile
                       {cat.name}
                       <span className="material-symbols-outlined text-text-meta text-[18px]">chevron_right</span>
                     </Link>
-                    
+
                     {cat.children.length > 0 && (
                       <div className="bg-surface-container-low pb-2 pt-1 px-5 grid grid-cols-1 gap-1">
                         {cat.children.map((sub) => (
@@ -102,7 +103,7 @@ export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: Mobile
               </nav>
 
               {/* ─── Bottom Actions ────────────────────────────── */}
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.4 }}
@@ -120,13 +121,24 @@ export function MobileMenu({ isOpen, onClose, categoryTree, onOpenAuth }: Mobile
                 </Link>
 
                 <div className="grid grid-cols-2 gap-3 pt-4 border-t border-divider">
-                  <button
-                    onClick={() => { onClose(); onOpenAuth(); }}
-                    className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border border-divider text-text-secondary hover:border-belia-coral hover:text-belia-red transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">person</span>
-                    <span className="text-xs font-semibold">Mi Cuenta</span>
-                  </button>
+                  {isLoggedIn ? (
+                    <Link
+                      to="/mis-pedidos"
+                      onClick={onClose}
+                      className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border border-divider text-text-secondary hover:border-belia-coral hover:text-belia-red transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">receipt_long</span>
+                      <span className="text-xs font-semibold">Mis pedidos</span>
+                    </Link>
+                  ) : (
+                    <button
+                      onClick={() => { onClose(); onOpenAuth(); }}
+                      className="flex flex-col items-center justify-center gap-1.5 p-3 rounded-xl border border-divider text-text-secondary hover:border-belia-coral hover:text-belia-red transition-colors"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">person</span>
+                      <span className="text-xs font-semibold">Mi Cuenta</span>
+                    </button>
+                  )}
                   <Link
                     to="/proveedores"
                     onClick={onClose}

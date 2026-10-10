@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useCartStore } from '../../store/cartStore';
 import type { Product, SupplierProduct } from '../../types/database';
 import { getValidPromo } from '../../lib/pricing';
+import { useBusinessInfo, whatsappUrl } from '../../hooks/useSiteContent';
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
@@ -54,6 +55,7 @@ export function ProductDetailPage() {
   const { user } = useAuth();
   const { addToCart } = useCartStore();
   const navigate = useNavigate();
+  const business = useBusinessInfo();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [supplierPrice, setSupplierPrice] = useState<number | null>(null);
@@ -372,7 +374,7 @@ export function ProductDetailPage() {
                 <p className="text-sm font-bold text-belia-charcoal">¿Tienes dudas sobre este producto?</p>
                 <p className="text-xs text-text-secondary mt-0.5">Nuestros asesores te ayudan a elegir el tono o tratamiento ideal.</p>
                 <a
-                  href="https://wa.me/521XXXXXXXXXX"
+                  href={whatsappUrl(business.whatsapp, `Hola, tengo una duda sobre: ${product.name} (SKU ${product.sku})`)}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 mt-2 text-xs font-bold text-belia-red hover:text-belia-coral transition-colors"

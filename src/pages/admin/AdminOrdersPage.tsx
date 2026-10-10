@@ -2,7 +2,9 @@ import { Fragment, useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import type { Order } from '../../types/database';
 import { formatPrice } from '../../lib/pricing';
-import { fetchOrderItems, formatAddress, orderNumber, type OrderItemDetail, type OrderShipping } from '../../lib/orders';
+import { fetchOrderItems, formatAddress, orderNumber, trackingText, type OrderItemDetail, type OrderShipping } from '../../lib/orders';
+
+const NOTIFY_STATUSES: Order['status'][] = ['Enviado', 'Entregado', 'Cancelado'];
 
 function OrderDetail({ order }: { order: Order }) {
   const [items, setItems] = useState<OrderItemDetail[] | null>(null);
@@ -76,6 +78,9 @@ function OrderDetail({ order }: { order: Order }) {
           <h4 className="text-xs font-bold uppercase tracking-wider text-text-secondary mb-2">Pago</h4>
           <p className="text-text-secondary">Tipo: <span className="font-medium text-text-primary">{order.tipo === 'mayoreo' ? 'Mayoreo (B2B)' : 'Público'}</span></p>
           <p className="text-text-secondary">Fecha: <span className="text-text-primary">{new Date(order.created_at).toLocaleString('es-MX')}</span></p>
+          {trackingText(order.tracking_info) && (
+            <p className="text-text-secondary">Guía: <span className="font-medium text-text-primary">{trackingText(order.tracking_info)}</span></p>
+          )}
           {order.stripe_payment_intent && (
             <p className="text-text-secondary break-all">Stripe: <span className="font-mono text-xs text-text-primary">{order.stripe_payment_intent}</span></p>
           )}
@@ -107,17 +112,40 @@ export function AdminOrdersPage() {
     void fetchOrders();
   }, []);
 
+  const [notice, setNotice] = useState<string | null>(null);
+
   const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
-    if (newStatus === 'Cancelado' && !confirm('¿Cancelar este pedido? No se puede deshacer.')) return;
+    if (newStatus === 'Cancelado' && !confirm('¿Cancelar este pedido? Se avisará al cliente por correo. Recuerda hacer el reembolso en Stripe.')) return;
+
+    const changes: Partial<Order> = { status: newStatus };
+    if (newStatus === 'Enviado') {
+      const tracking = prompt('Paquetería y número de guía (opcional). Se incluirá en el correo al cliente.\nEj: Estafeta 1234567890');
+      if (tracking === null) return; // Cancelled
+      if (tracking.trim()) changes.tracking_info = { text: tracking.trim() };
+    }
+
     const previous = orders;
     // Optimistic update
-    setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+    setOrders(orders.map(o => o.id === orderId ? { ...o, ...changes } : o));
 
     // DB Update (revert if it fails)
-    const { error } = await (supabase.from('orders') as any).update({ status: newStatus }).eq('id', orderId);
+    const { error } = await (supabase.from('orders') as any).update(changes).eq('id', orderId);
     if (error) {
       setOrders(previous);
       alert('No se pudo actualizar el pedido: ' + error.message);
+      return;
+    }
+
+    // Email the customer about the new status
+    if (NOTIFY_STATUSES.includes(newStatus)) {
+      setNotice('Enviando correo al cliente…');
+      const { data, error: mailError } = await supabase.functions.invoke('notify-order-status', { body: { order_id: orderId } });
+      if (mailError || !data?.sent) {
+        setNotice(`Estado actualizado, pero no se envió el correo${data?.reason ? ` (${data.reason})` : mailError ? ` (${mailError.message})` : ''}.`);
+      } else {
+        setNotice('Estado actualizado y correo enviado al cliente ✓');
+      }
+      setTimeout(() => setNotice(null), 5000);
     }
   };
 
@@ -139,6 +167,10 @@ export function AdminOrdersPage() {
           <span className="material-symbols-outlined text-text-secondary">refresh</span>
         </button>
       </div>
+
+      {notice && (
+        <div className="mb-4 text-sm bg-surface-container text-text-primary px-4 py-3 rounded-lg border border-divider">{notice}</div>
+      )}
 
       <div className="bg-white rounded-xl border border-divider overflow-hidden shadow-sm">
         <div className="overflow-x-auto">

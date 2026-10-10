@@ -24,6 +24,41 @@ export interface CarouselContent {
   slides?: CarouselSlide[];
 }
 
+/** business_info — contact and legal data used by the footer, legal pages, WhatsApp buttons and emails */
+export interface BusinessInfo {
+  nombre_comercial?: string;
+  razon_social?: string;
+  rfc?: string;
+  domicilio?: string;
+  email?: string;
+  telefono?: string;
+  whatsapp?: string;       // digits with country code, e.g. 523380007919
+  horario?: string;
+  tiempo_entrega?: string;
+  dias_devolucion?: string;
+  instagram?: string;
+  facebook?: string;
+}
+
+export const BUSINESS_DEFAULTS: Required<BusinessInfo> = {
+  nombre_comercial: 'Belia',
+  razon_social: '',
+  rfc: '',
+  domicilio: '',
+  email: '',
+  telefono: '',
+  whatsapp: '523380007919',
+  horario: 'Lunes a viernes de 9:00 a 18:00 h',
+  tiempo_entrega: '3 a 7 días hábiles',
+  dias_devolucion: '15',
+  instagram: '',
+  facebook: '',
+};
+
+/** WhatsApp link with an optional pre-filled message */
+export const whatsappUrl = (number: string, text?: string) =>
+  `https://wa.me/${number.replace(/\D/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
+
 type ContentMap = Record<string, unknown>;
 
 // site_content is tiny and rarely changes: load it once per page load and share it
@@ -62,4 +97,15 @@ export function useSiteContent<T>(id: string): { content: T | null; loading: boo
   }, [id]);
 
   return { content, loading };
+}
+
+/** Business data with defaults for empty fields */
+export function useBusinessInfo(): Required<BusinessInfo> {
+  const { content } = useSiteContent<BusinessInfo>('business_info');
+  const merged = { ...BUSINESS_DEFAULTS };
+  for (const key of Object.keys(merged) as (keyof BusinessInfo)[]) {
+    const value = content?.[key]?.trim();
+    if (value) merged[key] = value;
+  }
+  return merged;
 }

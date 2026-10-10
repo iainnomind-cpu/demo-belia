@@ -44,6 +44,7 @@ function CheckoutForm({
   const navigate = useNavigate();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const formatPrice = (price: number) =>
     new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(price);
@@ -59,6 +60,10 @@ function CheckoutForm({
     }
     if (phone.replace(/\D/g, '').length < 10) {
       setError('Escribe un teléfono de contacto de 10 dígitos para la entrega.');
+      return;
+    }
+    if (!acceptedTerms) {
+      setError('Debes aceptar los términos y condiciones y el aviso de privacidad para continuar.');
       return;
     }
 
@@ -187,6 +192,19 @@ function CheckoutForm({
             </div>
           </div>
 
+          <label className="flex items-start gap-2 text-xs text-text-secondary mb-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={acceptedTerms}
+              onChange={e => setAcceptedTerms(e.target.checked)}
+              className="mt-0.5 rounded border-gray-300 text-belia-red focus:ring-belia-red"
+            />
+            <span>
+              Acepto los <Link to="/terminos-y-condiciones" target="_blank" className="text-belia-red font-semibold hover:underline">términos y condiciones</Link>,
+              la <Link to="/envios-y-devoluciones" target="_blank" className="text-belia-red font-semibold hover:underline">política de envíos y devoluciones</Link> y
+              el <Link to="/aviso-de-privacidad" target="_blank" className="text-belia-red font-semibold hover:underline">aviso de privacidad</Link>.
+            </span>
+          </label>
           <button
             form="checkout-form"
             type="submit"

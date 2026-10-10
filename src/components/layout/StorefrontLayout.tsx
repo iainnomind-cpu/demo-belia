@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { Header } from './Header';
 import { CartSidebar } from '../cart/CartSidebar';
+import { Footer } from './Footer';
 
 /**
  * StorefrontLayout — Wraps all public storefront pages.
@@ -13,6 +14,7 @@ export function StorefrontLayout() {
       <main>
         <Outlet />
       </main>
+      <Footer />
       <CartSidebar />
     </div>
   );

@@ -22,6 +22,7 @@ export function Header() {
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isScrolled, setIsScrolled] = useState(false);
   const navigate = useNavigate();
@@ -137,13 +138,41 @@ export function Header() {
 
             {/* Mi cuenta — abre modal o muestra opciones si ya está logueado */}
             {user ? (
-              <button
-                onClick={() => void signOut()}
-                className="hidden md:flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
-              >
-                <span className="material-symbols-outlined text-[20px]">person</span>
-                <span className="hidden lg:inline">Cerrar sesión</span>
-              </button>
+              <div className="relative hidden md:block">
+                <button
+                  onClick={() => setIsAccountMenuOpen(o => !o)}
+                  onBlur={() => setTimeout(() => setIsAccountMenuOpen(false), 150)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary hover:text-belia-red transition-colors px-3 py-2 rounded-full hover:bg-belia-blush"
+                  aria-haspopup="menu"
+                  aria-expanded={isAccountMenuOpen}
+                >
+                  <span className="material-symbols-outlined text-[20px]">person</span>
+                  <span className="hidden lg:inline">Mi cuenta</span>
+                  <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                </button>
+                {isAccountMenuOpen && (
+                  <div role="menu" className="absolute right-0 top-full mt-2 w-56 bg-white rounded-2xl border border-divider shadow-mega-menu py-2 z-50">
+                    <p className="px-4 py-2 text-[11px] text-text-meta truncate border-b border-divider mb-1">{user.email}</p>
+                    <Link to="/mis-pedidos" className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-belia-blush hover:text-belia-red">
+                      <span className="material-symbols-outlined text-[18px]">receipt_long</span>
+                      Mis pedidos
+                    </Link>
+                    {user.role === 'admin' && (
+                      <Link to="/admin" className="flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-belia-blush hover:text-belia-red">
+                        <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+                        Panel de administración
+                      </Link>
+                    )}
+                    <button
+                      onClick={() => void signOut()}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-text-secondary hover:bg-belia-blush hover:text-belia-red"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">logout</span>
+                      Cerrar sesión
+                    </button>
+                  </div>
+                )}
+              </div>
             ) : (
               <button
                 onClick={() => setIsAuthModalOpen(true)}
@@ -315,6 +344,7 @@ export function Header() {
         onClose={() => setIsMobileMenuOpen(false)}
         categoryTree={categoryTree}
         onOpenAuth={() => setIsAuthModalOpen(true)}
+        isLoggedIn={!!user}
       />
 
       {/* ─── Auth Modal ──────────────────────────────────────────────── */}

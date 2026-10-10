@@ -7,6 +7,7 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@14.10.0?target=deno';
+import nodemailer from 'npm:nodemailer@6.9.16';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -27,6 +28,59 @@ const json = (body: unknown, status = 200) =>
 // Same rule as src/lib/pricing.ts
 const validPromo = (publico: number, promo: number | null) =>
   promo && promo > 0 && promo < publico ? promo : null;
+
+// ── Email (Gmail SMTP) ───────────────────────────────────────
+// Self-contained on purpose: each Edge Function is deployed by pasting a single
+// file in the Supabase dashboard. Port 465 (SMTPS) — Supabase blocks 25 and 587.
+const GMAIL_USER = Deno.env.get('GMAIL_USER');
+const GMAIL_APP_PASSWORD = Deno.env.get('GMAIL_APP_PASSWORD');
+const DEFAULT_SITE_URL = Deno.env.get('SITE_URL') ?? 'https://demo-belia.vercel.app';
+
+interface BusinessInfo { nombre_comercial?: string; email?: string; whatsapp?: string; telefono?: string; razon_social?: string }
+
+const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+const money = (n: number) => new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n);
+
+async function loadBusinessInfo(supabase: ReturnType<typeof createClient>): Promise<BusinessInfo> {
+  const { data } = await supabase.from('site_content').select('content_data').eq('id', 'business_info').maybeSingle();
+  return (data?.content_data as BusinessInfo) ?? {};
+}
+
+function emailLayout(biz: BusinessInfo, title: string, body: string): string {
+  const store = esc(biz.nombre_comercial || 'Belia');
+  const contact = [
+    biz.email && `<a href="mailto:${esc(biz.email)}" style="color:#F6423C">${esc(biz.email)}</a>`,
+    biz.whatsapp && `<a href="https://wa.me/${esc(String(biz.whatsapp).replace(/\D/g, ''))}" style="color:#F6423C">WhatsApp</a>`,
+  ].filter(Boolean).join(' · ');
+  return `<!doctype html><html><body style="margin:0;background:#FDF8F5;font-family:Arial,Helvetica,sans-serif;color:#232323">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#FDF8F5;padding:24px 12px"><tr><td align="center">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #f0e6e2">
+      <tr><td style="background:#F6423C;padding:20px 28px;color:#ffffff;font-size:22px;font-weight:bold">${store}</td></tr>
+      <tr><td style="padding:28px">
+        <h1 style="margin:0 0 16px;font-size:22px;color:#232323">${title}</h1>
+        ${body}
+      </td></tr>
+      <tr><td style="padding:18px 28px;background:#FFF0F3;font-size:12px;color:#777">
+        ¿Dudas? Escríbenos${contact ? `: ${contact}` : ''}.<br>${esc(biz.razon_social || biz.nombre_comercial || 'Belia')}
+      </td></tr>
+    </table>
+  </td></tr></table></body></html>`;
+}
+
+async function sendMail(fromName: string, to: string, subject: string, html: string): Promise<boolean> {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.warn('Email skipped: GMAIL_USER / GMAIL_APP_PASSWORD secrets are not set');
+    return false;
+  }
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD },
+  });
+  await transporter.sendMail({ from: `"${fromName.replace(/"/g, '')}" <${GMAIL_USER}>`, to, subject, html });
+  return true;
+}
 
 interface ShippingAddress {
   name?: string;
@@ -116,7 +170,7 @@ serve(async (req) => {
     const isB2B = pi.metadata.is_b2b === 'true';
     const { data: products, error: productsError } = await supabaseAdmin
       .from('products')
-      .select('id, price_publico, price_promo, price_proveedor')
+      .select('id, name, sku, price_publico, price_promo, price_proveedor')
       .in('id', cart.map(([id]) => id));
     if (productsError || !products) throw new Error('Error fetching product data');
 
@@ -165,6 +219,48 @@ serve(async (req) => {
         p_quantity: quantity,
       });
       if (error) console.error('decrement_stock failed', productId, error.message);
+    }
+
+    // ── Emails: confirmation to the customer + new-order notice to the store ──
+    // A failed email never fails the order (the payment is already done).
+    try {
+      const biz = await loadBusinessInfo(supabaseAdmin);
+      const store = biz.nombre_comercial || 'Belia';
+      const siteUrl = req.headers.get('origin') ?? DEFAULT_SITE_URL;
+      const number = String(order.id).split('-')[0].toUpperCase();
+      const shippingCost = Number(pi.metadata.shipping_cents ?? 0) / 100;
+      const rows = orderItems.map((i) => {
+        const p = products.find((x) => x.id === i.product_id);
+        return `<tr>
+          <td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px">${esc(p?.name ?? 'Producto')}<br><span style="color:#999;font-size:12px">SKU ${esc(p?.sku ?? '')} · Cant. ${i.quantity}</span></td>
+          <td style="padding:8px 0;border-bottom:1px solid #eee;font-size:14px;text-align:right;white-space:nowrap">${money(i.unit_price * i.quantity)}</td>
+        </tr>`;
+      }).join('');
+      const summary = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows}
+        <tr><td style="padding:8px 0;font-size:14px;color:#777">Envío</td><td style="padding:8px 0;text-align:right;font-size:14px">${shippingCost === 0 ? 'Gratis' : money(shippingCost)}</td></tr>
+        <tr><td style="padding:8px 0;font-size:16px;font-weight:bold">Total</td><td style="padding:8px 0;text-align:right;font-size:16px;font-weight:bold">${money(pi.amount / 100)}</td></tr>
+      </table>`;
+      const shippingBlock = `<p style="font-size:14px;line-height:1.5;margin:16px 0 0"><strong>Envío a:</strong><br>
+        ${esc(address.name)}<br>${esc(address.street)}, ${esc(address.city)}, ${esc(address.state)}, C.P. ${esc(address.zip)}<br>Tel. ${esc(address.phone)}</p>`;
+
+      const sends: Promise<boolean>[] = [];
+      if (user.email) {
+        sends.push(sendMail(store, user.email, `Confirmación de tu pedido #${number}`, emailLayout(biz, `¡Gracias por tu compra, ${esc(String(address.name).split(' ')[0])}!`, `
+          <p style="font-size:14px;line-height:1.5">Recibimos tu pago y ya estamos preparando tu pedido <strong>#${number}</strong>. Te avisaremos por correo cuando sea enviado.</p>
+          ${summary}${shippingBlock}
+          <p style="margin:24px 0 0"><a href="${esc(siteUrl)}/pedido/${order.id}" style="background:#F6423C;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold;font-size:14px;display:inline-block">Ver mi pedido</a></p>`)));
+      }
+      const storeEmail = biz.email || GMAIL_USER;
+      if (storeEmail) {
+        sends.push(sendMail(store, storeEmail, `🛍️ Nuevo pedido #${number} — ${money(pi.amount / 100)}`, emailLayout(biz, `Nuevo pedido #${number}`, `
+          <p style="font-size:14px;line-height:1.5">Cliente: <strong>${esc(address.name)}</strong> · ${esc(user.email)} · ${esc(address.phone)}<br>Tipo: ${isB2B ? 'Mayoreo (B2B)' : 'Público'}</p>
+          ${summary}${shippingBlock}
+          <p style="margin:24px 0 0"><a href="${esc(siteUrl)}/admin/orders" style="background:#232323;color:#fff;text-decoration:none;padding:12px 22px;border-radius:10px;font-weight:bold;font-size:14px;display:inline-block">Abrir en el administrador</a></p>`)));
+      }
+      const results = await Promise.allSettled(sends);
+      results.forEach((r) => { if (r.status === 'rejected') console.error('Order email failed:', r.reason); });
+    } catch (mailErr) {
+      console.error('Order emails failed:', mailErr);
     }
 
     return json({ success: true, order_id: order.id });

@@ -7,6 +7,8 @@ import { CategoryPage } from './pages/storefront/CategoryPage';
 import { ProductDetailPage } from './pages/storefront/ProductDetailPage';
 import { CheckoutPage } from './pages/storefront/CheckoutPage';
 import { OrderConfirmationPage } from './pages/storefront/OrderConfirmationPage';
+import { MyOrdersPage } from './pages/storefront/MyOrdersPage';
+import { TermsPage, PrivacyPage, ShippingReturnsPage, ContactPage } from './pages/storefront/LegalPages';
 import { SupplierFormPage } from './pages/storefront/SupplierFormPage';
 import { LoginPage } from './pages/storefront/LoginPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -28,6 +30,11 @@ function App() {
           <Route path="/producto/:id" element={<ProductDetailPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/pedido/:id" element={<OrderConfirmationPage />} />
+          <Route path="/mis-pedidos" element={<MyOrdersPage />} />
+          <Route path="/terminos-y-condiciones" element={<TermsPage />} />
+          <Route path="/aviso-de-privacidad" element={<PrivacyPage />} />
+          <Route path="/envios-y-devoluciones" element={<ShippingReturnsPage />} />
+          <Route path="/contacto" element={<ContactPage />} />
           <Route path="/proveedores" element={<SupplierFormPage />} />
           <Route path="/login" element={<LoginPage />} />
         </Route>

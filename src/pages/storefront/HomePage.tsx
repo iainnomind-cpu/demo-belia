@@ -6,7 +6,7 @@ import { ProductCard } from '../../components/catalog/ProductCard';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import type { SupplierProduct } from '../../types/database';
-import { useSiteContent, type HeroContent, type CarouselContent } from '../../hooks/useSiteContent';
+import { useSiteContent, useBusinessInfo, whatsappUrl, type HeroContent, type CarouselContent } from '../../hooks/useSiteContent';
 import { PromoCarousel } from '../../components/home/PromoCarousel';
 import { SmartLink } from '../../components/home/SmartLink';
 
@@ -169,6 +169,7 @@ export function HomePage() {
   const { user } = useAuth();
   const { content: heroContent } = useSiteContent<HeroContent>('home_banner_main');
   const { content: carousel } = useSiteContent<CarouselContent>('home_carousel');
+  const business = useBusinessInfo();
   const pick = (key: keyof HeroContent) => heroContent?.[key]?.trim() || HERO_DEFAULTS[key];
   const hero = {
     badge: pick('badge'),
@@ -602,7 +603,7 @@ export function HomePage() {
                 Buscar tintes
               </Link>
               <a
-                href="https://wa.me/523380007919?text=Hola%2C%20me%20interesa%20un%20tinte%20y%20necesito%20orientaci%C3%B3n"
+                href={whatsappUrl(business.whatsapp, 'Hola, me interesa un tinte y necesito orientación')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-secondary text-sm px-6"

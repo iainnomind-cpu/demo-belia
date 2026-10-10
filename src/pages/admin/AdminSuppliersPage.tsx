@@ -40,11 +40,9 @@ export function AdminSuppliersPage() {
           throw new Error(body?.error ?? error.message);
         }
         if (data?.emailSent === false) {
-          alert(`Proveedor aprobado, pero no se pudo enviar el correo.
-
-Comparte estos datos manualmente:
-Usuario: ${supplier?.email}
-Contraseña temporal: ${data.tempPassword}`);
+          alert(data.tempPassword
+            ? `Proveedor aprobado, pero no se pudo enviar el correo.\n\nComparte estos datos manualmente:\nUsuario: ${supplier?.email}\nContraseña temporal: ${data.tempPassword}`
+            : 'Proveedor aprobado (ya tenía cuenta y conserva su contraseña), pero no se pudo enviar el correo de bienvenida.');
         }
       } else {
         const { error } = await (supabase.from('suppliers') as any).update({ status: 'rechazado' }).eq('id', id);
