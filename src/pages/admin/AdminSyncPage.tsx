@@ -146,7 +146,7 @@ export function AdminSyncPage() {
                         <p className="text-xs text-text-meta">No se encontró la columna «Activo» en el Sheet: los productos conservan su estado actual.</p>
                       )}
                       {!(result as any).extraColumn && (
-                        <p className="text-xs text-text-meta">No se encontró la columna «Categorías adicionales» en el Sheet.</p>
+                        <p className="text-xs text-text-meta">No se encontraron columnas de categorías adicionales («Categoría 2» / «Subcategoría 2») en el Sheet.</p>
                       )}
                     </div>
                   )}

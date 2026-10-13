@@ -31,7 +31,9 @@ const json = (body: unknown, status = 200) =>
 // A Código | B Título | C Descripción | D Stock | E Precio | F Promoción
 // G Marca | H Categoría | I Subcategoría | J-L URL_Imagen_01..03
 // Optional columns (only read when their header exists):
-//   "Activo" (SI/NO) · "Categorías adicionales" (e.g. "PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE")
+//   "Activo" (SI/NO)
+//   "Categoría 2" + "Subcategoría 2" (and "Categoría 3" + "Subcategoría 3"): extra categories
+//   "Categorías adicionales" (alternative, one cell: "PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE")
 const COLUMNS = {
   sku:         { index: 0,  headers: ['codigo', 'sku', 'clave'] },
   name:        { index: 1,  headers: ['titulo', 'nombre', 'producto'] },
@@ -40,8 +42,12 @@ const COLUMNS = {
   price:       { index: 4,  headers: ['precio', 'preciopublico'] },
   promo:       { index: 5,  headers: ['promocion', 'preciopromo', 'promo'] },
   brand:       { index: 6,  headers: ['marca'] },
-  category:    { index: 7,  headers: ['categoria'] },
-  subcategory: { index: 8,  headers: ['subcategoria'] },
+  category:    { index: 7,  headers: ['categoria', 'categoria1'] },
+  subcategory: { index: 8,  headers: ['subcategoria', 'subcategoria1'] },
+  category2:   { index: -1, headers: ['categoria2'] },
+  subcategory2:{ index: -1, headers: ['subcategoria2'] },
+  category3:   { index: -1, headers: ['categoria3'] },
+  subcategory3:{ index: -1, headers: ['subcategoria3'] },
   img1:        { index: 9,  headers: ['urlimagen01', 'urlimagen1', 'imagen1', 'imagen'] },
   img2:        { index: 10, headers: ['urlimagen02', 'urlimagen2', 'imagen2'] },
   img3:        { index: 11, headers: ['urlimagen03', 'urlimagen3', 'imagen3'] },
@@ -335,13 +341,21 @@ serve(async (req) => {
       return childId;
     };
 
-    // "PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE" → category ids
-    const resolveExtraCategories = async (value: string | undefined, mainId: string | null) => {
-      const ids: string[] = [];
-      for (const part of (cleanText(value) ?? '').split(/[;\n|]+/)) {
+    // Extra categories from "Categoría 2/3" + "Subcategoría 2/3" columns and/or the
+    // "Categorías adicionales" cell ("PROFESIONALES / WAXERS; MEN'S CARE / SKINCARE")
+    const resolveExtraCategories = async (row: string[], mainId: string | null) => {
+      const pairs: [string | null, string | null][] = [
+        [cleanText(cell(row, 'category2')), cleanText(cell(row, 'subcategory2'))],
+        [cleanText(cell(row, 'category3')), cleanText(cell(row, 'subcategory3'))],
+      ];
+      for (const part of (cleanText(cell(row, 'extra')) ?? '').split(/[;\n|]+/)) {
         if (!part.trim()) continue;
         const [cat, ...rest] = part.split('/');
-        const id = await resolveCategory(cleanText(cat), cleanText(rest.join('/')));
+        pairs.push([cleanText(cat), cleanText(rest.join('/'))]);
+      }
+      const ids: string[] = [];
+      for (const [cat, sub] of pairs) {
+        const id = await resolveCategory(cat, sub);
         if (id && id !== mainId && !ids.includes(id)) ids.push(id);
       }
       return ids;
@@ -375,7 +389,7 @@ serve(async (req) => {
         description: cleanText(cell(row, 'description')),
         brand: cleanText(cell(row, 'brand')),
         category_id: categoryId,
-        extra_category_ids: await resolveExtraCategories(cell(row, 'extra'), categoryId),
+        extra_category_ids: await resolveExtraCategories(row, categoryId),
         price_publico: pricePublico,
         price_promo: parseMoney(cell(row, 'promo')),
         stock: parseStock(cell(row, 'stock')),
@@ -478,7 +492,7 @@ serve(async (req) => {
       hiddenNoImage: parsedRows.filter((r) => willBeActive(r) && !r.image_url).length,
       hiddenInactive: parsedRows.filter((r) => !willBeActive(r)).length,
       activeColumn: col.active >= 0,
-      extraColumn: col.extra >= 0,
+      extraColumn: col.extra >= 0 || col.category2 >= 0 || col.category3 >= 0,
     };
 
     // ── 6. Preview mode: return diff without applying ─────────
