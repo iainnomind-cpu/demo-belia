@@ -14,6 +14,15 @@ GRANT SELECT (
   is_active, source, created_at, updated_at
 ) ON public.products TO anon, authenticated;
 
+-- Keep the extra-categories column readable if 0007 already ran (see 0009)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = 'public' AND table_name = 'products' AND column_name = 'extra_category_ids') THEN
+    GRANT SELECT (extra_category_ids) ON public.products TO anon, authenticated;
+  END IF;
+END $$;
+
 -- Admin panel listing (includes price_proveedor and inactive products)
 CREATE OR REPLACE FUNCTION public.admin_get_products()
 RETURNS SETOF public.products
@@ -21,7 +30,7 @@ LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  IF (auth.jwt() -> 'user_metadata' ->> 'role') IS DISTINCT FROM 'admin' THEN
+  IF (auth.jwt() -> 'app_metadata' ->> 'role') IS DISTINCT FROM 'admin' THEN
     RAISE EXCEPTION 'Access denied: admin role required';
   END IF;
   RETURN QUERY SELECT * FROM public.products;

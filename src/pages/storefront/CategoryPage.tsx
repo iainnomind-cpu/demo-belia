@@ -74,10 +74,14 @@ export function CategoryPage() {
     ? [categoryId, ...categories.filter(c => c.parent_id === categoryId).map(c => c.id)].join(',')
     : '';
 
-  const { products, loading, loadingMore, hasMore, loadMore, filters, setFilters } = useProducts({
+  // Wait until the URL's category is known: loading before that fetched ALL products,
+  // which could show unrelated items (e.g. make-up inside "Peinado y Estilizado").
+  const isCatalogWide = slug === 'todos' || !!query;
+  const categoryNotFound = !isCatalogWide && !catsLoading && !category;
+  const { products, loading, loadingMore, hasMore, loadMore, filters, setFilters, error } = useProducts({
     categoryId,
     searchQuery: query ?? undefined,
-  });
+  }, { enabled: isCatalogWide || !!categoryId });
 
   const [supplierProducts, setSupplierProducts] = useState<SupplierProduct[]>([]);
   // Cache de marcas vistas: se acumula aunque el filtro de precio reduzca los productos.
@@ -149,6 +153,17 @@ export function CategoryPage() {
     : category?.name ?? (catsLoading ? '…' : 'Categoría');
 
   const hasActiveFilters = !!(filters.brand || filters.minPrice || filters.maxPrice);
+
+  if (categoryNotFound) {
+    return (
+      <div className="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 bg-belia-cream">
+        <span className="material-symbols-outlined text-6xl text-text-meta opacity-50 mb-3">category</span>
+        <h2 className="text-2xl font-bold text-belia-charcoal mb-2">Categoría no disponible</h2>
+        <p className="text-text-secondary text-sm mb-6 max-w-sm">Esta categoría no existe o por ahora no tiene productos disponibles.</p>
+        <Link to="/categoria/todos" className="btn-primary">Ver todos los productos</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-belia-cream min-h-screen">
@@ -246,8 +261,18 @@ export function CategoryPage() {
             </motion.div>
           )}
 
+          {/* Error state */}
+          {!loading && error && (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <span className="material-symbols-outlined text-5xl text-error mb-3">error</span>
+              <h3 className="text-xl font-bold text-belia-charcoal mb-2">No pudimos cargar los productos</h3>
+              <p className="text-text-secondary text-sm max-w-sm mb-6">Intenta de nuevo en unos momentos.</p>
+              <button onClick={() => setFilters(prev => ({ ...prev }))} className="btn-primary text-sm">Reintentar</button>
+            </div>
+          )}
+
           {/* Empty state */}
-          {!loading && filteredProducts.length === 0 && (
+          {!loading && !error && filteredProducts.length === 0 && (
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}

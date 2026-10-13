@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { Product } from '../types/database';
 
@@ -31,7 +31,11 @@ interface UseProductsReturn {
  * price_proveedor is NEVER selected here — only get_supplier_products() RPC returns it.
  * Filters are applied server-side for performance.
  */
-export function useProducts(initialFilters: ProductFilters = {}): UseProductsReturn {
+export function useProducts(
+  initialFilters: ProductFilters = {},
+  /** enabled=false waits (e.g. until the category of the URL is known) instead of loading all products */
+  { enabled = true }: { enabled?: boolean } = {},
+): UseProductsReturn {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadingMore, setLoadingMore] = useState<boolean>(false);
@@ -39,6 +43,12 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState<number>(0);
   const [filters, setFilters] = useState<ProductFilters>(initialFilters);
+  // Each new filter set gets a request id; responses from older requests are ignored
+  // (otherwise a slow "all products" response could overwrite a category's products).
+  const requestId = useRef(0);
+  // Extra categories need SELECT on products.extra_category_ids (migration 0007/0009).
+  // If that permission is missing, fall back to the main category instead of failing.
+  const [extraCategories, setExtraCategories] = useState(true);
 
   const buildQuery = useCallback((currentOffset: number) => {
     // IMPORTANT: price_proveedor is intentionally NOT selected here.
@@ -64,7 +74,9 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     if (!term && categoryIds.length) {
       // Main category OR any of the extra categories (e.g. Profesionales / Waxers)
       const list = categoryIds.join(',');
-      query = query.or(`category_id.in.(${list}),extra_category_ids.ov.{${list}}`);
+      query = extraCategories
+        ? query.or(`category_id.in.(${list}),extra_category_ids.ov.{${list}}`)
+        : query.in('category_id', categoryIds);
     }
     if (filters.brand) {
       query = query.eq('brand', filters.brand);
@@ -81,19 +93,31 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     }
 
     return query;
-  }, [filters]);
+  }, [filters, extraCategories]);
+
+  const isPermissionError = (e: { code?: string; message?: string }) =>
+    e.code === '42501' || /permission denied/i.test(e.message ?? '');
 
   // Reset when filters change
   useEffect(() => {
+    const id = ++requestId.current;
     setProducts([]);
     setOffset(0);
     setHasMore(true);
     setLoading(true);
+    setError(null);
+    if (!enabled) return;
 
     const fetchInitial = async () => {
       const { data, error: fetchError } = await buildQuery(0);
+      if (id !== requestId.current) return; // A newer request is in flight
       if (fetchError) {
+        if (extraCategories && isPermissionError(fetchError)) {
+          setExtraCategories(false); // Retries automatically without extra categories
+          return;
+        }
         setError(fetchError.message);
+        setHasMore(false); // Stops the infinite scroll from retrying forever
       } else {
         setProducts(data ?? []);
         setHasMore((data?.length ?? 0) === PAGE_SIZE);
@@ -103,16 +127,19 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     };
 
     void fetchInitial();
-  }, [filters, buildQuery]);
+  }, [filters, buildQuery, enabled, extraCategories]);
 
   const loadMore = useCallback(() => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || !enabled) return;
 
+    const id = requestId.current;
     setLoadingMore(true);
     const fetchMore = async () => {
       const { data, error: fetchError } = await buildQuery(offset);
+      if (id !== requestId.current) return;
       if (fetchError) {
         setError(fetchError.message);
+        setHasMore(false);
       } else {
         setProducts((prev) => [...prev, ...(data ?? [])]);
         setHasMore((data?.length ?? 0) === PAGE_SIZE);
@@ -122,7 +149,7 @@ export function useProducts(initialFilters: ProductFilters = {}): UseProductsRet
     };
 
     void fetchMore();
-  }, [loadingMore, hasMore, offset, buildQuery]);
+  }, [loadingMore, hasMore, offset, buildQuery, enabled]);
 
   const updateFilters = useCallback(
     (newFilters: ProductFilters | ((prev: ProductFilters) => ProductFilters)) => {
