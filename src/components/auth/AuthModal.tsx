@@ -102,13 +102,15 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
           />
 
           {/* ── Modal panel ── */}
+          {/* Centered by a flex wrapper: the animation sets `transform`, which would drop translate-based centering */}
+          <div key="auth-modal-wrapper" className="fixed inset-0 z-[90] flex items-center justify-center p-4 pointer-events-none">
           <motion.div
             key="auth-modal"
             initial={{ opacity: 0, scale: 0.95, y: -12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: -12 }}
             transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[90] w-full max-w-sm mx-4"
+            className="w-full max-w-sm max-h-full overflow-y-auto rounded-3xl pointer-events-auto"
           >
             <div className="bg-white rounded-3xl shadow-[0_32px_64px_-12px_rgba(0,0,0,0.25)] border border-divider overflow-hidden">
 
@@ -352,6 +354,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
               </div>
             </div>
           </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>
