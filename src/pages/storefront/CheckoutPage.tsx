@@ -14,7 +14,7 @@ type ShippingAddress = { name: string; phone: string; street: string; city: stri
 const ADDRESS_STORAGE_KEY = 'belia-checkout-address';
 
 // The order is created server-side from the verified Stripe payment
-async function confirmOrder(paymentIntentId: string, shippingAddress: ShippingAddress): Promise<string> {
+async function confirmOrder(paymentIntentId: string, shippingAddress?: ShippingAddress): Promise<string> {
   const { data, error } = await supabase.functions.invoke('confirm-order', {
     body: { payment_intent_id: paymentIntentId, shipping_address: shippingAddress },
   });
@@ -82,6 +82,18 @@ function CheckoutForm({
         clientSecret,
         confirmParams: {
           return_url: window.location.origin + '/checkout',
+          // Saved on the payment: an OXXO voucher is paid days later and the webhook creates the order from it
+          shipping: {
+            name: shippingAddress.name,
+            phone: shippingAddress.phone,
+            address: {
+              line1: shippingAddress.street,
+              city: shippingAddress.city,
+              state: shippingAddress.state,
+              postal_code: shippingAddress.zip,
+              country: 'MX'
+            }
+          },
           payment_method_data: {
             billing_details: {
               address: {
@@ -101,7 +113,17 @@ function CheckoutForm({
         throw result.error;
       }
 
-      if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+      // requires_action here means the customer closed the OXXO voucher: the order waits for the cash payment
+      const isVoucher = result.paymentIntent?.status === 'requires_action'
+        && result.paymentIntent.next_action?.type === 'oxxo_display_details';
+
+      if (result.paymentIntent && isVoucher) {
+        const orderId = await confirmOrder(result.paymentIntent.id, shippingAddress);
+        try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }
+        clearCart();
+        setCheckoutSuccess(true);
+        navigate(`/pedido/${orderId}`, { replace: true });
+      } else if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
         let orderId: string;
         try {
           orderId = await confirmOrder(result.paymentIntent.id, shippingAddress);
@@ -144,7 +166,7 @@ function CheckoutForm({
 
           <form id="checkout-form" onSubmit={handlePayment}>
             <h3 className="font-headline-sm font-bold text-lg text-text-primary mb-4 pb-2 border-b border-divider">
-              Pago con Tarjeta
+              Método de Pago
             </h3>
 
             <div className="bg-surface-dim rounded-lg p-6 mb-8 border border-divider">
@@ -261,16 +283,14 @@ export function CheckoutPage() {
   // Coming back from a Stripe redirect (3D Secure, etc.)
   useEffect(() => {
     if (!user || !returnedPaymentIntent) return;
-    if (redirectStatus !== 'succeeded') {
+    // 'pending' is an OXXO voucher opened outside this page
+    if (redirectStatus !== 'succeeded' && redirectStatus !== 'pending') {
       setFinalizeError('El pago no se completó. Puedes intentarlo de nuevo.');
       return;
     }
-    let saved: ShippingAddress | null = null;
-    try { saved = JSON.parse(sessionStorage.getItem(ADDRESS_STORAGE_KEY) ?? 'null'); } catch { /* ignore */ }
-    if (!saved) {
-      setFinalizeError(`Tu pago se realizó, pero no encontramos la dirección de envío. Contáctanos con este folio: ${returnedPaymentIntent}`);
-      return;
-    }
+    // Without a saved address, confirm-order uses the one stored on the payment
+    let saved: ShippingAddress | undefined;
+    try { saved = JSON.parse(sessionStorage.getItem(ADDRESS_STORAGE_KEY) ?? 'null') ?? undefined; } catch { /* ignore */ }
     confirmOrder(returnedPaymentIntent, saved)
       .then((orderId) => {
         try { sessionStorage.removeItem(ADDRESS_STORAGE_KEY); } catch { /* ignore */ }

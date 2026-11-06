@@ -55,6 +55,15 @@ export const BUSINESS_DEFAULTS: Required<BusinessInfo> = {
   facebook: '',
 };
 
+/** shipping_settings — amounts in pesos, as typed in the admin. Charged by create-payment-intent. */
+export interface ShippingSettings {
+  cost?: string;
+  free_from?: string;
+}
+
+// Must match the defaults in create-payment-intent
+export const SHIPPING_DEFAULTS = { cost: 150, free_from: 1500 };
+
 /** WhatsApp link with an optional pre-filled message */
 export const whatsappUrl = (number: string, text?: string) =>
   `https://wa.me/${number.replace(/\D/g, '')}${text ? `?text=${encodeURIComponent(text)}` : ''}`;
@@ -97,6 +106,20 @@ export function useSiteContent<T>(id: string): { content: T | null; loading: boo
   }, [id]);
 
   return { content, loading };
+}
+
+const toAmount = (value: string | undefined, fallback: number) => {
+  const amount = value?.trim() ? Number(value) : NaN;
+  return Number.isFinite(amount) && amount >= 0 ? amount : fallback;
+};
+
+/** Shipping amounts with defaults for blank or invalid fields */
+export function useShippingSettings() {
+  const { content } = useSiteContent<ShippingSettings>('shipping_settings');
+  return {
+    cost: toAmount(content?.cost, SHIPPING_DEFAULTS.cost),
+    freeFrom: toAmount(content?.free_from, SHIPPING_DEFAULTS.free_from),
+  };
 }
 
 /** Business data with defaults for empty fields */

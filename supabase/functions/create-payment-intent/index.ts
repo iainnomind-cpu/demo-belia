@@ -23,9 +23,16 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
 
+// Used when Admin → Contenido → "Envío" is empty (same defaults as src/hooks/useSiteContent.ts)
 const SHIPPING_COST_CENTS = 15000;        // $150.00 MXN
 const FREE_SHIPPING_FROM_CENTS = 150000;  // $1,500.00 MXN
 const METADATA_CHUNK = 450;               // Stripe metadata values are limited to 500 chars
+
+// Pesos saved by the admin → cents. Blank or invalid values use the default.
+const toCents = (value: unknown, fallback: number) => {
+  const pesos = value === '' || value == null ? NaN : Number(value);
+  return Number.isFinite(pesos) && pesos >= 0 ? Math.round(pesos * 100) : fallback;
+};
 
 // Same rule as src/lib/pricing.ts: a promo only counts if it is a real discount
 const validPromo = (publico: number, promo: number | null) =>
@@ -127,7 +134,14 @@ serve(async (req) => {
     }
 
     // 5. Shipping (Mocking envía.com integration for MVP)
-    const shippingCostCents = totalCents >= FREE_SHIPPING_FROM_CENTS ? 0 : SHIPPING_COST_CENTS;
+    const { data: shippingRow } = await supabaseAdmin
+      .from('site_content')
+      .select('content_data')
+      .eq('id', 'shipping_settings')
+      .maybeSingle();
+    const shipping = (shippingRow?.content_data ?? {}) as { cost?: unknown; free_from?: unknown };
+    const freeFromCents = toCents(shipping.free_from, FREE_SHIPPING_FROM_CENTS);
+    const shippingCostCents = totalCents >= freeFromCents ? 0 : toCents(shipping.cost, SHIPPING_COST_CENTS);
     totalCents += shippingCostCents;
 
     // 6. The validated cart travels inside the Payment Intent so confirm-order

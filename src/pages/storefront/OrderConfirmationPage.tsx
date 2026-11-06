@@ -73,16 +73,33 @@ export function OrderConfirmationPage() {
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             transition={{ delay: 0.15, type: 'spring', stiffness: 260, damping: 18 }}
-            className="mx-auto w-20 h-20 rounded-full bg-success-green/10 flex items-center justify-center mb-5"
+            className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-5 ${order.status === 'Pendiente de pago' ? 'bg-orange-100' : 'bg-success-green/10'}`}
           >
-            <span className="material-symbols-outlined text-5xl text-success-green">check_circle</span>
+            <span className={`material-symbols-outlined text-5xl ${order.status === 'Pendiente de pago' ? 'text-orange-800' : 'text-success-green'}`}>
+              {order.status === 'Pendiente de pago' ? 'schedule' : 'check_circle'}
+            </span>
           </motion.div>
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-belia-charcoal mb-2">
-            ¡Gracias por tu compra{shipping.name ? `, ${shipping.name.split(' ')[0]}` : ''}!
+            {order.status === 'Pendiente de pago'
+              ? 'Paga tu ficha en OXXO'
+              : `¡Gracias por tu compra${shipping.name ? `, ${shipping.name.split(' ')[0]}` : ''}!`}
           </h1>
           <p className="text-text-secondary mb-6">
-            {order.status === 'Procesando' ? 'Recibimos tu pago y ya estamos preparando tu pedido.' : STATUS_STYLES[order.status].label + '.'}
+            {order.status === 'Pendiente de pago'
+              ? 'Apartamos tus productos. Prepararemos tu pedido cuando se confirme tu pago, a más tardar el siguiente día hábil. También te enviamos la ficha por correo.'
+              : order.status === 'Procesando' ? 'Recibimos tu pago y ya estamos preparando tu pedido.' : STATUS_STYLES[order.status].label + '.'}
           </p>
+          {order.status === 'Pendiente de pago' && order.payment_voucher_url && (
+            <a
+              href={order.payment_voucher_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block bg-belia-red text-white px-6 py-3 rounded-xl font-bold hover:bg-belia-red-deep transition-colors mb-6"
+            >
+              Ver mi ficha de pago
+            </a>
+          )}
+          <br />
           <div className="inline-flex flex-col sm:flex-row items-center gap-2 sm:gap-6 bg-belia-blush rounded-2xl px-6 py-4">
             <div>
               <p className="text-[11px] uppercase tracking-wider font-bold text-text-meta">Número de pedido</p>
@@ -90,7 +107,7 @@ export function OrderConfirmationPage() {
             </div>
             <div className="hidden sm:block w-px h-10 bg-belia-pink/30" />
             <div>
-              <p className="text-[11px] uppercase tracking-wider font-bold text-text-meta">Total pagado</p>
+              <p className="text-[11px] uppercase tracking-wider font-bold text-text-meta">{order.status === 'Pendiente de pago' ? 'Total a pagar' : 'Total pagado'}</p>
               <p className="text-xl font-extrabold text-belia-charcoal">{formatPrice(order.total_amount)}</p>
             </div>
           </div>

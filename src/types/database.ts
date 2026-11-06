@@ -59,7 +59,7 @@ export interface Database {
       };
     };
     Enums: {
-      order_status: 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
+      order_status: 'Pendiente de pago' | 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
       order_tipo: 'publico' | 'mayoreo';
       product_source: 'sheet' | 'manual';
       supplier_status: 'pendiente' | 'aprobado' | 'rechazado';
@@ -115,11 +115,13 @@ export interface Order {
   id: string;
   user_id: string;
   tipo: 'publico' | 'mayoreo';
-  status: 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
+  status: 'Pendiente de pago' | 'Procesando' | 'Enviado' | 'Entregado' | 'Cancelado';
   total_amount: number;
   shipping_address: Json;
   tracking_info: Json | null;
   stripe_payment_intent: string | null;
+  /** Stripe-hosted OXXO voucher, only for orders paid in cash */
+  payment_voucher_url?: string | null;
   created_at: string;
   updated_at: string;
 }

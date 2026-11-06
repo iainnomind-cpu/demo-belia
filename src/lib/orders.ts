@@ -43,6 +43,7 @@ export const formatAddress = (s: OrderShipping) =>
 
 /** Customer-facing label and style for each order status */
 export const STATUS_STYLES: Record<Order['status'], { label: string; className: string; icon: string }> = {
+  'Pendiente de pago': { label: 'Pendiente de pago en OXXO', className: 'bg-orange-100 text-orange-800', icon: 'schedule' },
   Procesando: { label: 'Preparando tu pedido', className: 'bg-yellow-100 text-yellow-800', icon: 'inventory_2' },
   Enviado: { label: 'En camino', className: 'bg-blue-100 text-blue-800', icon: 'local_shipping' },
   Entregado: { label: 'Entregado', className: 'bg-success-container text-success-green', icon: 'check_circle' },

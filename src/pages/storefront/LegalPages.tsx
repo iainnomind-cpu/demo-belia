@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { useBusinessInfo, whatsappUrl } from '../../hooks/useSiteContent';
+import { useBusinessInfo, useShippingSettings, whatsappUrl } from '../../hooks/useSiteContent';
 
-// Free shipping rule — must match create-payment-intent
-const SHIPPING_COST = '$150 MXN';
-const FREE_SHIPPING_FROM = '$1,500 MXN';
+const formatPesos = (amount: number) => `$${amount.toLocaleString('es-MX')} MXN`;
 const LAST_UPDATE = 'octubre de 2026';
 
 function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
@@ -169,12 +167,15 @@ export function PrivacyPage() {
 
 export function ShippingReturnsPage() {
   const { info } = useOwner();
+  const shipping = useShippingSettings();
   return (
     <LegalLayout title="Envíos y devoluciones">
       <h2>Envíos</h2>
       <ul>
         <li>Enviamos a toda la República Mexicana.</li>
-        <li><strong>Costo de envío: {SHIPPING_COST}.</strong> <strong>Envío gratis</strong> en compras desde {FREE_SHIPPING_FROM}.</li>
+        {shipping.cost === 0 || shipping.freeFrom === 0
+          ? <li><strong>Envío gratis</strong> en todas las compras.</li>
+          : <li><strong>Costo de envío: {formatPesos(shipping.cost)}.</strong> <strong>Envío gratis</strong> en compras desde {formatPesos(shipping.freeFrom)}.</li>}
         <li>Tiempo estimado de entrega: <strong>{info.tiempo_entrega}</strong> a partir de la confirmación del pago. Zonas extendidas pueden tardar más.</li>
         <li>Cuando tu pedido sea enviado te avisaremos por correo, con la paquetería y el número de guía cuando aplique.</li>
         <li>Revisa tu paquete al recibirlo. Si llega dañado o abierto, anótalo con el repartidor y contáctanos dentro de las 48 horas siguientes, con fotos del empaque.</li>
@@ -192,7 +193,8 @@ export function ShippingReturnsPage() {
       <h2>Reembolsos</h2>
       <p>
         Una vez que recibamos y revisemos el producto, el reembolso se hace al mismo método de pago en un plazo de 5 a 10 días hábiles,
-        según los tiempos de tu banco. El costo de envío original no es reembolsable, salvo error de nuestra parte.
+        según los tiempos de tu banco. Los pagos en efectivo en OXXO no pueden devolverse por ese medio: esos reembolsos se hacen por transferencia bancaria.
+        El costo de envío original no es reembolsable, salvo error de nuestra parte.
       </p>
 
       <h2>Cómo solicitarlo</h2>

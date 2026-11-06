@@ -151,6 +151,7 @@ export function AdminOrdersPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
+      case 'Pendiente de pago': return <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Pendiente de pago</span>;
       case 'Procesando': return <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Procesando</span>;
       case 'Enviado': return <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Enviado</span>;
       case 'Entregado': return <span className="bg-success-container text-success-green text-xs font-medium px-2.5 py-0.5 rounded uppercase tracking-wider">Entregado</span>;
@@ -223,8 +224,10 @@ export function AdminOrdersPage() {
                             value={order.status}
                             onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
                             className="text-xs border-gray-300 rounded-md focus:ring-belia-red focus:border-belia-red py-1 pl-2 pr-6"
-                            disabled={order.status === 'Cancelado' || order.status === 'Entregado'}
+                            // A pending OXXO order changes by itself when the voucher is paid or expires
+                            disabled={order.status === 'Cancelado' || order.status === 'Entregado' || order.status === 'Pendiente de pago'}
                           >
+                            {order.status === 'Pendiente de pago' && <option value="Pendiente de pago">Esperando pago en OXXO</option>}
                             <option value="Procesando">Marcar Procesando</option>
                             <option value="Enviado" disabled={order.status !== 'Procesando'}>Marcar Enviado</option>
                             <option value="Entregado" disabled={order.status !== 'Enviado'}>Marcar Entregado</option>

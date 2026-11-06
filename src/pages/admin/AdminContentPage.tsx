@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { BUSINESS_DEFAULTS, type BusinessInfo, type CarouselSlide, type HeroContent } from '../../hooks/useSiteContent';
+import { BUSINESS_DEFAULTS, SHIPPING_DEFAULTS, type BusinessInfo, type CarouselSlide, type HeroContent, type ShippingSettings } from '../../hooks/useSiteContent';
 
 // One shape covers every block: hero fields, carousel slides or a simple { value } setting
-type ContentData = HeroContent & BusinessInfo & { slides?: CarouselSlide[]; value?: string };
+type ContentData = HeroContent & BusinessInfo & ShippingSettings & { slides?: CarouselSlide[]; value?: string };
 
 interface SiteContent {
   id: string;
@@ -13,6 +13,7 @@ interface SiteContent {
 const HERO_ID = 'home_banner_main';
 const CAROUSEL_ID = 'home_carousel';
 const BUSINESS_ID = 'business_info';
+const SHIPPING_ID = 'shipping_settings';
 
 const BUSINESS_FIELDS: { key: keyof BusinessInfo; label: string; help?: string; legal?: boolean }[] = [
   { key: 'nombre_comercial', label: 'Nombre comercial' },
@@ -175,7 +176,10 @@ export function AdminContentPage() {
   };
 
   // ── Settings: any other block with a simple { value } ──
-  const settings = contents.filter(c => c.id !== HERO_ID && c.id !== CAROUSEL_ID && c.id !== BUSINESS_ID);
+  const settings = contents.filter(c => c.id !== HERO_ID && c.id !== CAROUSEL_ID && c.id !== BUSINESS_ID && c.id !== SHIPPING_ID);
+
+  // ── Shipping ───────────────────────────────────────────
+  const shipping: ShippingSettings = getData(SHIPPING_ID);
 
   // ── Business info ──────────────────────────────────────
   const business: BusinessInfo = getData(BUSINESS_ID);
@@ -312,6 +316,42 @@ export function AdminContentPage() {
           )}
 
           {renderSave(CAROUSEL_ID)}
+        </section>
+
+        {/* ─── Shipping ────────────────────────────────── */}
+        <section className="bg-white rounded-xl border border-divider p-6 shadow-sm space-y-4 xl:col-span-2">
+          <div className="flex items-center gap-2 border-b border-divider pb-3">
+            <span className="material-symbols-outlined text-belia-red">local_shipping</span>
+            <h2 className="font-bold text-lg text-text-primary">Envío</h2>
+          </div>
+          <p className="text-xs text-text-secondary">
+            Se cobra en el checkout y se muestra en la política de envíos. Si dejas un campo vacío se usa el valor indicado en gris.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Costo de envío (MXN)" help="Escribe 0 para que el envío sea gratis en todas las compras.">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shipping.cost ?? ''}
+                onChange={e => setData(SHIPPING_ID, { ...shipping, cost: e.target.value })}
+                placeholder={String(SHIPPING_DEFAULTS.cost)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Envío gratis desde (MXN)" help="Compras de este monto o más no pagan envío.">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={shipping.free_from ?? ''}
+                onChange={e => setData(SHIPPING_ID, { ...shipping, free_from: e.target.value })}
+                placeholder={String(SHIPPING_DEFAULTS.free_from)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+          {renderSave(SHIPPING_ID)}
         </section>
 
         {/* ─── Business info ───────────────────────────── */}
